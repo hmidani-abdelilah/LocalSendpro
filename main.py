@@ -1,6 +1,7 @@
 """Local network file sharing with a Flet interface."""
 
 import asyncio
+import base64
 import os
 import socket
 import subprocess
@@ -13,6 +14,16 @@ import flet as ft
 import flet_audio as fta
 from zeroconf import ServiceInfo
 from zeroconf.asyncio import AsyncServiceBrowser, AsyncServiceInfo, AsyncZeroconf
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import padding, rsa
+from cryptography.hazmat.primitives import hashes
+
+from crypto_utils import (
+    decrypt_file_chunk,
+    decrypt_message_payload,
+    encrypt_file_chunk,
+    encrypt_message_payload,
+)
 
 try:
     import psutil
@@ -293,6 +304,7 @@ def main(page: ft.Page):
         "receive_dir_mode": "downloads",
         "receive_dir": str(get_received_files_dir()),
     }
+    device_private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     discovered_devices = {}
     devices_lock = threading.RLock()
     receiver_lock = asyncio.Lock()
@@ -514,27 +526,47 @@ def main(page: ft.Page):
         source_ip = writer.get_extra_info("peername")[0]
         try:
             prefix = await asyncio.wait_for(reader.readexactly(4), timeout=10)
-            if prefix == b"MSG:":
+            if prefix == b"KEY?":
+                public_bytes = device_private_key.public_key().public_bytes(
+                    serialization.Encoding.PEM,
+                    serialization.PublicFormat.SubjectPublicKeyInfo,
+                )
+                writer.write(len(public_bytes).to_bytes(4, "big") + public_bytes)
+                await writer.drain()
+                return
+            if prefix == b"MSGE":
                 size_text = await asyncio.wait_for(reader.readuntil(b"\n"), timeout=10)
-                message_size = int(size_text[:-1])
-                if not 0 < message_size <= MAX_MESSAGE_BYTES:
-                    raise ValueError("حجم الرسالة غير صالح.")
-                message = (await reader.readexactly(message_size)).decode("utf-8")
+                message_size_text, key_size_text = size_text[:-1].decode("ascii").split(":")
+                message_size = int(message_size_text)
+                key_size = int(key_size_text)
+                if not 0 < message_size <= MAX_MESSAGE_BYTES or key_size != 256:
+                    raise ValueError("Invalid encrypted message size")
+                wrapped_key = await reader.readexactly(key_size)
+                nonce = await reader.readexactly(12)
+                ciphertext = await reader.readexactly(message_size + 16)
+                message = decrypt_message_payload(
+                    device_private_key, wrapped_key, nonce, ciphertext
+                ).decode("utf-8")
                 add_activity(f"{source_ip}: {message}")
                 writer.write(b"OK")
                 await writer.drain()
                 return
-
             if prefix != b"FILE":
                 return
-            header = prefix + await asyncio.wait_for(reader.read(1024), timeout=10)
+            header = prefix + await asyncio.wait_for(reader.readuntil(b"\n"), timeout=10)
 
             async with receiver_lock:
                 filename = ""
                 try:
                     header_text = header.decode("utf-8")
-                    _, file_details = header_text.split(":", 1)
-                    filename, filesize_text = file_details.rsplit(":", 1)
+                    encrypted_transfer = header_text.startswith("FILEE:")
+                    if not encrypted_transfer:
+                        raise ValueError("Unencrypted transfers are not accepted")
+                    file_details = header_text.split(":", 1)[1].rstrip("\n")
+                    filename, filesize_text, key_size_text = file_details.rsplit(":", 2)
+                    key_size = int(key_size_text)
+                    if key_size != 256:
+                        raise ValueError("Invalid wrapped key size")
                     filename = Path(filename).name
                     filesize = int(filesize_text)
                     if not filename or filesize < 0:
@@ -595,18 +627,38 @@ def main(page: ft.Page):
                     receive_dir = get_receive_dir(app_config)
                     receive_dir.mkdir(parents=True, exist_ok=True)
                     received_path = receive_dir / filename
+                    partial_path = received_path.with_name(f".{received_path.name}.{os.urandom(4).hex()}.part")
                     received_bytes = 0
                     last_ui_update = 0.0
 
-                    with received_path.open("wb") as output_file:
-                        while received_bytes < filesize:
-                            data = await reader.read(
-                                min(CHUNK_SIZE, filesize - received_bytes)
+                    with partial_path.open("wb") as output_file:
+                        if encrypted_transfer:
+                            wrapped_key = await reader.readexactly(key_size)
+                            wrapped_text = device_private_key.decrypt(
+                                wrapped_key,
+                                padding.OAEP(
+                                    mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                                    algorithm=hashes.SHA256(),
+                                    label=None,
+                                ),
                             )
-                            if not data:
-                                break
-                            await asyncio.to_thread(output_file.write, data)
-                            received_bytes += len(data)
+                            aes_key = base64.urlsafe_b64decode(wrapped_text)
+                            nonce_prefix = await reader.readexactly(8)
+                            chunk_index = 0
+                            while received_bytes < filesize:
+                                plain_size = min(CHUNK_SIZE, filesize - received_bytes)
+                                encrypted_chunk = await reader.readexactly(plain_size + 16)
+                                data = decrypt_file_chunk(aes_key, nonce_prefix, chunk_index, encrypted_chunk)
+                                await asyncio.to_thread(output_file.write, data)
+                                received_bytes += len(data)
+                                chunk_index += 1
+                        else:
+                            while received_bytes < filesize:
+                                data = await reader.read(min(CHUNK_SIZE, filesize - received_bytes))
+                                if not data:
+                                    break
+                                await asyncio.to_thread(output_file.write, data)
+                                received_bytes += len(data)
                             now = time.monotonic()
                             if now - last_ui_update >= 0.1 or received_bytes == filesize:
                                 progress_bar.value = (
@@ -620,19 +672,25 @@ def main(page: ft.Page):
                                 last_ui_update = now
 
                     if received_bytes != filesize:
-                        received_path.unlink(missing_ok=True)
+                        partial_path.unlink(missing_ok=True)
                         add_activity(
                             f"انقطع الاتصال أثناء استقبال {filename}.", color="red"
                         )
                         return
+
+                    partial_path.replace(received_path)
 
                     add_activity(
                         f"تم استلام {filename} وحفظه في {received_path}.", color="green"
                     )
                     await play_notification()
                 except (OSError, ValueError, asyncio.TimeoutError) as error:
+                    if "partial_path" in locals():
+                        partial_path.unlink(missing_ok=True)
                     add_activity(f"تعذر استقبال الملف: {error}", color="red")
                 except Exception as error:
+                    if "partial_path" in locals():
+                        partial_path.unlink(missing_ok=True)
                     add_activity(f"حدث خطأ أثناء الاستقبال: {error}", color="red")
                 finally:
                     progress_bar.visible = False
@@ -881,7 +939,26 @@ def main(page: ft.Page):
             reader, writer = await asyncio.wait_for(
                 asyncio.open_connection(target["ip"], target["port"]), timeout=15
             )
-            writer.write(f"MSG:{len(payload)}\n".encode("ascii") + payload)
+            writer.write(b"KEY?")
+            await writer.drain()
+            public_size = int.from_bytes(await asyncio.wait_for(reader.readexactly(4), timeout=10), "big")
+            if not 1 <= public_size <= 8192:
+                raise ValueError("Invalid receiver public key")
+            receiver_public_key = serialization.load_pem_public_key(
+                await asyncio.wait_for(reader.readexactly(public_size), timeout=10)
+            )
+            writer.close()
+            await writer.wait_closed()
+            writer = None
+
+            wrapped_key, nonce, ciphertext = encrypt_message_payload(receiver_public_key, payload)
+            reader, writer = await asyncio.wait_for(
+                asyncio.open_connection(target["ip"], target["port"]), timeout=15
+            )
+            writer.write(
+                f"MSGE:{len(ciphertext) - 16}:{len(wrapped_key)}\n".encode("ascii")
+                + wrapped_key + nonce + ciphertext
+            )
             await writer.drain()
             acknowledgement = await asyncio.wait_for(
                 reader.readexactly(2), timeout=10
@@ -919,13 +996,28 @@ def main(page: ft.Page):
             reader, writer = await asyncio.wait_for(
                 asyncio.open_connection(target["ip"], target["port"]), timeout=15
             )
-            writer.write(f"FILE:{filename}:{filesize}".encode("utf-8"))
+            writer.write(b"KEY?")
             await writer.drain()
-            response = await asyncio.wait_for(reader.read(1024), timeout=35)
+            public_size = int.from_bytes(await asyncio.wait_for(reader.readexactly(4), timeout=10), "big")
+            if not 1 <= public_size <= 8192:
+                raise ValueError("Invalid receiver public key")
+            receiver_public_key = serialization.load_pem_public_key(
+                await asyncio.wait_for(reader.readexactly(public_size), timeout=10)
+            )
+            aes_key = os.urandom(32)
+            nonce_prefix = os.urandom(8)
+            wrapped_key = encrypt_message(
+                receiver_public_key, base64.urlsafe_b64encode(aes_key).decode("ascii")
+            )
+            writer.write(f"FILEE:{filename}:{filesize}:{len(wrapped_key)}\n".encode("utf-8"))
+            await writer.drain()
+            response = await asyncio.wait_for(reader.readexactly(6), timeout=35)
             if response != b"ACCEPT":
                 add_activity(f"رفض {target['name']} استقبال {filename}.", color="red")
                 return
 
+            writer.write(wrapped_key + nonce_prefix)
+            await writer.drain()
             progress_bar.visible = True
             progress_text.visible = True
             progress_bar.value = 0
@@ -943,7 +1035,8 @@ def main(page: ft.Page):
                     ]
                 if not data:
                     break
-                writer.write(data)
+                encrypted_data = encrypt_file_chunk(aes_key, nonce_prefix, sent_bytes // CHUNK_SIZE, data)
+                writer.write(encrypted_data)
                 await writer.drain()
                 sent_bytes += len(data)
                 now = time.monotonic()

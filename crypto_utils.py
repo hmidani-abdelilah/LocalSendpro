@@ -12,6 +12,8 @@ import os
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+import base64
 
 
 # ==============================================================================
@@ -144,3 +146,42 @@ def save_decrypted_file(encrypted_session_key: bytes, encrypted_file_bytes: byte
     # ج) كتابة البيانات المفكوكة وحفظها كملف حقيقي على القرص
     with open(output_path, "wb") as f:
         f.write(original_file_bytes)
+
+
+def encrypt_file_chunk(aes_key: bytes, nonce_prefix: bytes, index: int, data: bytes) -> bytes:
+    """Encrypt and authenticate one file chunk without buffering the whole file."""
+    nonce = nonce_prefix + index.to_bytes(4, "big")
+    return AESGCM(aes_key).encrypt(nonce, data, index.to_bytes(8, "big"))
+
+
+def decrypt_file_chunk(aes_key: bytes, nonce_prefix: bytes, index: int, data: bytes) -> bytes:
+    """Authenticate and decrypt one file chunk."""
+    nonce = nonce_prefix + index.to_bytes(4, "big")
+    return AESGCM(aes_key).decrypt(nonce, data, index.to_bytes(8, "big"))
+
+
+def encrypt_message_payload(public_key, payload: bytes) -> tuple[bytes, bytes, bytes]:
+    """Encrypt a short message with AES-GCM and wrap its random key with RSA-OAEP."""
+    key = os.urandom(32)
+    nonce = os.urandom(12)
+    ciphertext = AESGCM(key).encrypt(nonce, payload, b"localsend-message-v1")
+    wrapped_key = encrypt_message(public_key, base64.urlsafe_b64encode(key).decode("ascii"))
+    return wrapped_key, nonce, ciphertext
+
+
+def decrypt_message_payload(private_key, wrapped_key: bytes, nonce: bytes, ciphertext: bytes) -> bytes:
+    """Unwrap and authenticate an encrypted short message."""
+    encoded_key = private_key.decrypt(
+        wrapped_key,
+        padding.OAEP(
+            mgf=padding.MGF1(algorithm=hashes.SHA256()),
+            algorithm=hashes.SHA256(),
+            label=None,
+        ),
+    )
+    key = base64.urlsafe_b64decode(encoded_key)
+    return AESGCM(key).decrypt(nonce, ciphertext, b"localsend-message-v1")
+
+
+import os
+

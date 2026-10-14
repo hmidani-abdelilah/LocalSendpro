@@ -3,4 +3,5 @@ flet-cli
 flet-audio
 psutil
 zeroconf
+cryptography
 pyjnius
