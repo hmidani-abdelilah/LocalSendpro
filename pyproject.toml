@@ -5,7 +5,19 @@ product = "LocalSend Pro"
 name = "localsend-pro"
 version = "0.1.0"
 requires-python = ">=3.12"
-dependencies = ["flet", "flet-cli", "flet-audio", "psutil", "zeroconf", "pyjnius"]
+dependencies = ["flet", "flet-audio", "zeroconf"]
+
+[dependency-groups]
+dev = ["flet-cli"]
+
+[tool.flet.linux]
+dependencies = ["psutil"]
+
+[tool.flet.windows]
+dependencies = ["psutil"]
+
+[tool.flet.macos]
+dependencies = ["psutil"]
 
 [tool.flet.android]
 package = "com.localsend.pro"
@@ -15,10 +27,6 @@ proguard_rules = [
     "-keep class com.flet.serious_python.** { *; }",
     "-keep class com.flet.serious_python_android.** { *; }",
 ]
-signing_key_store = "C:/Users/abdelilah/upload-keystore.jks"
-signing_key_store_password = "199201"
-signing_key_alias = "upload"
-signing_key_password = "199201"
 
 [tool.flet.android.permission]
 "android.permission.ACCESS_NETWORK_STATE" = true

@@ -11,9 +11,13 @@ from pathlib import Path
 
 import flet as ft
 import flet_audio as fta
-import psutil
 from zeroconf import ServiceInfo
 from zeroconf.asyncio import AsyncServiceBrowser, AsyncServiceInfo, AsyncZeroconf
+
+try:
+    import psutil
+except ImportError:
+    psutil = None
 
 
 SERVICE_TYPE = "_localsend._tcp.local."
@@ -760,6 +764,11 @@ def main(page: ft.Page):
 
     async def monitor_live_speed():
         """Update the displayed upload and download rate from psutil counters."""
+        if psutil is None:
+            speed_status_text.value = "Live network speed is unavailable on this platform."
+            page.update()
+            return
+
         previous = psutil.net_io_counters()
         previous_time = time.monotonic()
         while session["active"]:
