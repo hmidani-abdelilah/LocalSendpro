@@ -1,4 +1,5 @@
 flet
+flet-cli
 flet-audio
 psutil
 zeroconf

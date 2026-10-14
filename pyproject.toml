@@ -4,7 +4,8 @@ product = "LocalSend Pro"
 [project]
 name = "localsend-pro"
 version = "0.1.0"
-dependencies = ["flet", "flet-audio", "psutil", "zeroconf","pyjnius"]
+requires-python = ">=3.12"
+dependencies = ["flet", "flet-cli", "flet-audio", "psutil", "zeroconf", "pyjnius"]
 
 [tool.flet.android]
 package = "com.localsend.pro"
