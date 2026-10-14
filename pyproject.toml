@@ -17,7 +17,8 @@ dependencies = ["psutil"]
 dependencies = ["psutil"]
 
 [tool.flet.macos]
-dependencies = ["psutil"]
+# cryptography 46.0.7 provides a universal2 wheel for Apple Silicon and Intel.
+dependencies = ["psutil", "cryptography==46.0.7"]
 
 [tool.flet.android]
 package = "com.localsend.pro"
