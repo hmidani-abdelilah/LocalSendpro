@@ -4,6 +4,7 @@ import asyncio
 import base64
 import os
 import socket
+import sqlite3
 import subprocess
 import sys
 import threading
@@ -36,6 +37,80 @@ HOSTNAME = socket.gethostname()
 DEFAULT_PORT = 50006
 CHUNK_SIZE = 64 * 1024
 MAX_MESSAGE_BYTES = 64 * 1024
+
+
+def get_settings_db_path() -> Path:
+    """Return a writable per-user database path, including Android app storage."""
+    try:
+        context, _ = get_android_context()
+        app_files = context.getFilesDir()
+        if app_files is not None:
+            return Path(str(app_files)) / "localsend_settings.sqlite3"
+    except Exception:
+        pass
+    return Path.home() / ".localsendpro" / "settings.sqlite3"
+
+
+def load_app_settings(defaults: dict) -> dict:
+    """Create the settings table on first launch and return saved values."""
+    database_path = get_settings_db_path()
+    database_path.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(database_path, timeout=10) as connection:
+        connection.execute(
+            """CREATE TABLE IF NOT EXISTS app_settings (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                device_name TEXT NOT NULL,
+                port INTEGER NOT NULL,
+                theme TEXT NOT NULL,
+                receive_dir_mode TEXT NOT NULL,
+                receive_dir TEXT NOT NULL
+            )"""
+        )
+        connection.execute(
+            """INSERT OR IGNORE INTO app_settings
+               (id, device_name, port, theme, receive_dir_mode, receive_dir)
+               VALUES (1, ?, ?, ?, ?, ?)""",
+            (
+                defaults["device_name"], defaults["port"], defaults["theme"],
+                defaults["receive_dir_mode"], defaults["receive_dir"],
+            ),
+        )
+        row = connection.execute(
+            """SELECT device_name, port, theme, receive_dir_mode, receive_dir
+               FROM app_settings WHERE id = 1"""
+        ).fetchone()
+    values = dict(zip(
+        ("device_name", "port", "theme", "receive_dir_mode", "receive_dir"), row
+    ))
+    if not 1 <= int(values["port"]) <= 65535:
+        values["port"] = defaults["port"]
+    if values["theme"] not in ("system", "dark", "light"):
+        values["theme"] = defaults["theme"]
+    if values["receive_dir_mode"] not in ("downloads", "custom"):
+        values["receive_dir_mode"] = defaults["receive_dir_mode"]
+    return values
+
+
+def save_app_settings(settings: dict) -> None:
+    """Persist the current device and interface settings in SQLite."""
+    database_path = get_settings_db_path()
+    database_path.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(database_path, timeout=10) as connection:
+        connection.execute(
+            """INSERT INTO app_settings
+               (id, device_name, port, theme, receive_dir_mode, receive_dir)
+               VALUES (1, ?, ?, ?, ?, ?)
+               ON CONFLICT(id) DO UPDATE SET
+                   device_name=excluded.device_name,
+                   port=excluded.port,
+                   theme=excluded.theme,
+                   receive_dir_mode=excluded.receive_dir_mode,
+                   receive_dir=excluded.receive_dir""",
+            (
+                settings["device_name"], settings["port"], settings["theme"],
+                settings["receive_dir_mode"], settings["receive_dir"],
+            ),
+        )
 
 
 def get_android_activity():
@@ -304,6 +379,10 @@ def main(page: ft.Page):
         "receive_dir_mode": "downloads",
         "receive_dir": str(get_received_files_dir()),
     }
+    try:
+        app_config.update(load_app_settings(app_config))
+    except (OSError, sqlite3.Error, ValueError) as error:
+        print(f"Could not load saved settings: {error}")
     device_private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     discovered_devices = {}
     devices_lock = threading.RLock()
@@ -1132,6 +1211,7 @@ def main(page: ft.Page):
         if event.path:
             app_config["receive_dir"] = str(safe_receive_dir(event.path))
             app_config["receive_dir_mode"] = "custom"
+            save_app_settings(app_config)
             add_activity(f"تم تعيين مجلد الاستلام: {app_config['receive_dir']}", color="green")
 
     async def pick_receive_directory(_):
@@ -1141,6 +1221,7 @@ def main(page: ft.Page):
             if selected:
                 app_config["receive_dir"] = str(safe_receive_dir(selected))
                 app_config["receive_dir_mode"] = "custom"
+                save_app_settings(app_config)
                 add_activity(f"تم تعيين مجلد الاستلام: {app_config['receive_dir']}", color="green")
                 return
         open_receive_directory(page, app_config)
@@ -1201,6 +1282,11 @@ def main(page: ft.Page):
             app_config["device_name"] = name_input.value.strip() or f"Device_{HOSTNAME}"
             app_config["port"] = new_port
             app_config["theme"] = theme_dropdown.value
+            try:
+                save_app_settings(app_config)
+            except (OSError, sqlite3.Error) as error:
+                add_activity(f"تعذر حفظ الإعدادات: {error}", color="red")
+                return
             page.pop_dialog()
             apply_theme(app_config["theme"])
             await restart_network()
