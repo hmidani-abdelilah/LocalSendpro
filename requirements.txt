@@ -1,0 +1,5 @@
+flet
+flet-audio
+psutil
+zeroconf
+pyjnius

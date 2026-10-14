@@ -1,0 +1,46 @@
+[tool.flet]
+product = "LocalSend Pro"
+
+[project]
+name = "localsend-pro"
+version = "0.1.0"
+dependencies = ["flet", "flet-audio", "psutil", "zeroconf","pyjnius"]
+
+[tool.flet.android]
+package = "com.localsend.pro"
+legacy_packaging = true
+dependencies = ["pyjnius", "certifi"]
+proguard_rules = [
+    "-keep class com.flet.serious_python.** { *; }",
+    "-keep class com.flet.serious_python_android.** { *; }",
+]
+signing_key_store = "C:/Users/abdelilah/upload-keystore.jks"
+signing_key_store_password = "199201"
+signing_key_alias = "upload"
+signing_key_password = "199201"
+
+[tool.flet.android.permission]
+"android.permission.ACCESS_NETWORK_STATE" = true
+"android.permission.ACCESS_WIFI_STATE" = true
+"android.permission.CHANGE_WIFI_MULTICAST_STATE" = true
+"android.permission.WAKE_LOCK" = true
+"android.permission.READ_EXTERNAL_STORAGE" = true
+"android.permission.WRITE_EXTERNAL_STORAGE" = true
+
+[tool.flet.icons]
+# مسار أيقونة التطبيق (تأكد من وجودها)
+android = "assets/icon.png"
+# مسار شاشة البداية (Android)
+splash_android = "assets/splash_android.png"
+# مسار شاشة البداية للوضع الداكن (Android)
+splash_android_dark = "assets/splash_android_dark.png"
+
+[tool.flet.splash]
+# لون الخلفية (يُستخدم إذا لم تكن هناك صورة أو كخلفية خلف الصورة)
+color = "#ffffff" 
+# لون الخلفية للوضع الداكن
+dark_color = "#1a1a2e" 
+# طريقة عرض الصورة (center, fill, fit...)
+android_gravity = "fill" 
+# إخفاء شعار Flet الدوّار أثناء بدء تشغيل Python
+hide_animation = true 
