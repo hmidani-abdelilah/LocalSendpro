@@ -1,4 +1,4 @@
-name: Build All Platforms
+name: All Builds (Linux, macOS, Windows, Android, IPA)
 
 on:
   push:
@@ -17,13 +17,13 @@ jobs:
         include:
           - target: linux
             runner: ubuntu-latest
-          - target: windows
-            runner: windows-latest
           - target: macos
             runner: macos-latest
-          - target: apk
-            runner: ubuntu-latest
+          - target: windows
+            runner: windows-latest
           - target: aab
+            runner: ubuntu-latest
+          - target: apk
             runner: ubuntu-latest
           - target: ipa
             runner: macos-latest
