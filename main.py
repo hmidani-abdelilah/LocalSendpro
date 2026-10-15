@@ -23,6 +23,7 @@ from crypto_utils import (
     decrypt_file_chunk,
     decrypt_message_payload,
     encrypt_file_chunk,
+    encrypt_message,
     encrypt_message_payload,
 )
 
