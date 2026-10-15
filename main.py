@@ -615,7 +615,10 @@ def main(page: ft.Page):
                 return
             if prefix == b"MSGE":
                 size_text = await asyncio.wait_for(reader.readuntil(b"\n"), timeout=10)
-                message_size_text, key_size_text = size_text[:-1].decode("ascii").split(":")
+                size_fields = size_text[:-1].decode("ascii").split(":")
+                if len(size_fields) != 3 or size_fields[0] != "":
+                    raise ValueError("Invalid encrypted message header")
+                message_size_text, key_size_text = size_fields[1:]
                 message_size = int(message_size_text)
                 key_size = int(key_size_text)
                 if not 0 < message_size <= MAX_MESSAGE_BYTES or key_size != 256:
