@@ -103,8 +103,20 @@ jobs:
       - name: Download build archives
         uses: actions/download-artifact@v4
         with:
+          pattern: "*-build"
           path: release-assets
           merge-multiple: true
+
+      - name: Verify release files
+        shell: bash
+        run: |
+          shopt -s nullglob
+          files=(release-assets/*)
+          if (( ${#files[@]} == 0 )); then
+            echo "No build files were downloaded; refusing to publish an empty release"
+            exit 1
+          fi
+          printf 'Release file: %s\n' "${files[@]}"
 
       - name: Create release and upload build files
         uses: softprops/action-gh-release@v2
@@ -113,4 +125,4 @@ jobs:
           name: LocalSend Pro ${{ github.ref_name }}
           generate_release_notes: true
           fail_on_unmatched_files: true
-          files: release-assets/*
+          files: release-assets/**
