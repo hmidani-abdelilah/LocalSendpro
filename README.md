@@ -1,4 +1,9 @@
 ﻿# LocalSend Pro
+<p align="center">
+  <img src="https://raw.githubusercontent.com/hmidani-abdelilah/LocalSendpro/refs/heads/main/LocalSendPro.png" alt="LocalSend Pro">
+</p>
+
+
 
 تطبيق لمشاركة الملفات والرسائل النصية مباشرةً بين الأجهزة المتصلة بالشبكة المحلية، مع اكتشاف الأجهزة تلقائيًا عبر Zeroconf.
 
