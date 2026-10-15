@@ -1,0 +1,129 @@
+name: All Builds (Linux, macOS, Windows, Android, IPA)
+
+on:
+  push:
+    branches: [main, master]
+    tags: ["v*.*.*"]
+  pull_request:
+    branches: [main, master]
+  
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux
+            runner: ubuntu-latest
+          - target: macos
+            runner: macos-latest
+          - target: windows
+            runner: windows-latest
+          - target: aab
+            runner: ubuntu-latest
+          - target: apk
+            runner: ubuntu-latest
+          - target: ipa
+            runner: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Android NDK with retries
+        if: matrix.target == 'aab' || matrix.target == 'apk'
+        shell: bash
+        run: |
+          sdk_root="${ANDROID_HOME:-${ANDROID_SDK_ROOT}}"
+          sdkmanager="$sdk_root/cmdline-tools/latest/bin/sdkmanager"
+          ndk_dir="$sdk_root/ndk/28.2.13676358"
+          if [[ ! -x "$sdkmanager" ]]; then
+            echo "Android sdkmanager not found at $sdkmanager"
+            exit 1
+          fi
+
+          "$sdkmanager" --sdk_root="$sdk_root" --licenses < <(yes 2>/dev/null)
+
+          for attempt in 1 2 3; do
+            echo "Installing NDK 28.2.13676358 (attempt $attempt/3)"
+            if "$sdkmanager" --sdk_root="$sdk_root" --install "ndk;28.2.13676358"; then
+              if [[ ! -f "$ndk_dir/source.properties" ]]; then
+                echo "NDK installation reported success but $ndk_dir/source.properties is missing"
+                exit 1
+              fi
+              exit 0
+            fi
+            "$sdkmanager" --sdk_root="$sdk_root" --uninstall "ndk;28.2.13676358" || true
+            sleep 5
+          done
+          echo "Failed to install NDK 28.2.13676358 after 3 attempts"
+          exit 1
+
+      - name: Set build version
+        id: version
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            version="0.1.0"
+          fi
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Build Flet app
+        id: build
+        uses: flet-dev/flet-build-action@v1
+        with:
+          target: ${{ matrix.target }}
+          runner-python-version: "3.12"
+          bundled-python-version: "3.12"
+          build-number: ${{ github.run_number }}
+          build-version: ${{ steps.version.outputs.value }}
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}-build
+          path: ${{ steps.build.outputs.archive-path }}
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download build archives
+        uses: actions/download-artifact@v4
+        with:
+          pattern: "*-build"
+          path: release-assets
+          merge-multiple: true
+
+      - name: Verify release files
+        shell: bash
+        run: |
+          shopt -s nullglob
+          files=(release-assets/*)
+          if (( ${#files[@]} == 0 )); then
+            echo "No build files were downloaded; refusing to publish an empty release"
+            exit 1
+          fi
+          printf 'Release file: %s\n' "${files[@]}"
+
+      - name: Create release and upload build files
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: LocalSend Pro ${{ github.ref_name }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            release-assets/*
+            release-assets/**/*
