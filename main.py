@@ -518,9 +518,9 @@ def main(page: ft.Page):
     notification_audio = None
     notification_file = Path(__file__).resolve().with_name("notification.wav")
     use_system_audio = page.platform == ft.PagePlatform.LINUX and not page.web
-    if notification_file.is_file() and not use_system_audio:
+    if not use_system_audio:
         notification_audio = fta.Audio(
-            src=notification_file.read_bytes(),
+            src="notification.wav",
             volume=0.75,
             release_mode=fta.ReleaseMode.STOP,
         )
