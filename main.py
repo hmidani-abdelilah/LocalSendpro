@@ -1223,6 +1223,13 @@ def main(page: ft.Page):
             receiver_public_key = serialization.load_pem_public_key(
                 await asyncio.wait_for(reader.readexactly(public_size), timeout=10)
             )
+            # The receiver closes the KEY? connection after returning its key.
+            # Reconnect before requesting file approval and transferring bytes.
+            writer.close()
+            await writer.wait_closed()
+            reader, writer = await asyncio.wait_for(
+                asyncio.open_connection(target["ip"], target["port"]), timeout=15
+            )
             aes_key = os.urandom(32)
             # Keep the established FILEE header so already-installed receivers
             # continue to show the incoming-file approval dialog.
