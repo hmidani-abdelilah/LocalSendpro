@@ -150,13 +150,19 @@ def save_decrypted_file(encrypted_session_key: bytes, encrypted_file_bytes: byte
 
 def encrypt_file_chunk(aes_key: bytes, nonce_prefix: bytes, index: int, data: bytes) -> bytes:
     """Encrypt and authenticate one file chunk without buffering the whole file."""
-    nonce = nonce_prefix + index.to_bytes(4, "big")
+    counter_size = 12 - len(nonce_prefix)
+    if not 0 < counter_size <= 8:
+        raise ValueError("Nonce prefix must be between 4 and 11 bytes")
+    nonce = nonce_prefix + index.to_bytes(counter_size, "big")
     return AESGCM(aes_key).encrypt(nonce, data, index.to_bytes(8, "big"))
 
 
 def decrypt_file_chunk(aes_key: bytes, nonce_prefix: bytes, index: int, data: bytes) -> bytes:
     """Authenticate and decrypt one file chunk."""
-    nonce = nonce_prefix + index.to_bytes(4, "big")
+    counter_size = 12 - len(nonce_prefix)
+    if not 0 < counter_size <= 8:
+        raise ValueError("Nonce prefix must be between 4 and 11 bytes")
+    nonce = nonce_prefix + index.to_bytes(counter_size, "big")
     return AESGCM(aes_key).decrypt(nonce, data, index.to_bytes(8, "big"))
 
 
