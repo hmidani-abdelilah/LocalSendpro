@@ -36,6 +36,88 @@ SERVICE_TYPE = "_localsend._tcp.local."
 HOSTNAME = socket.gethostname()
 DEFAULT_PORT = 50006
 CHUNK_SIZE = 64 * 1024
+ANDROID_RUNTIME = False
+
+TRANSLATIONS = {
+    "ar": {
+        "language": "اللغة", "arabic": "العربية", "english": "الإنجليزية", "french": "الفرنسية",
+        "recipient": "المستلم", "message_hint": "اكتب رسالة...", "speed": "رفع: {upload} | تحميل: {download}",
+        "network_starting": "جارٍ بدء خدمات الشبكة...", "searching": "جارٍ البحث عن أجهزة على الشبكة...",
+        "request_file": "طلب استقبال ملف", "device": "الجهاز: {value}", "file": "الملف: {value}",
+        "size": "الحجم: {value:.2f} MB", "accept": "استقبال", "reject": "رفض",
+        "receiving": "استلام {name}: {percent}%", "sending": "إرسال {name}: {percent}%",
+        "settings": "الإعدادات", "device_name": "اسم الجهاز على الشبكة", "port": "منفذ TCP",
+        "theme": "مظهر التطبيق", "system": "حسب النظام", "dark": "داكن", "light": "فاتح",
+        "receive_folder": "مسار مجلد الاستلام", "folder_example": "مسار مجلد لحفظ الملفات المستلمة",
+        "choose_folder": "اختيار مجلد الحفظ", "save": "حفظ", "cancel": "إلغاء",
+        "save_error": "تعذر حفظ الإعدادات: {error}", "invalid_port": "أدخل رقم منفذ صحيحًا بين 1 و65535.",
+        "devices": "الأجهزة المكتشفة", "activity": "النشاط", "files": "إرسال / استقبال الملفات",
+        "send_message": "إرسال رسالة", "choose_file": "اختيار ملف للإرسال", "open_folder": "فتح مجلد استقبال الملفات",
+        "select_receiver": "اختر جهاز الاستقبال", "send": "إرسال", "search_empty": "لم يتم اكتشاف أي جهاز لإرسال الملف إليه.",
+        "no_message_device": "اختر جهازًا متصلًا لإرسال الرسالة.", "network_connected": "متصل على {ip}:{port}",
+        "network_ready": "بدأ اكتشاف الأجهزة واستقبال الملفات.", "receive_ok": "تم استلام {name} وحفظه في {path}.",
+        "receive_failed": "تعذر استقبال الملف: {error}", "transfer_failed": "تعذر إرسال الملف: {error}",
+        "sent_ok": "تم إرسال {name} إلى {device} بنجاح.", "rejected": "رفض {device} استقبال {name}.",
+        "disconnected": "انقطع الاتصال أثناء استقبال {name}.", "message_to": "إلى {device}: {message}",
+        "network_error": "تعذر بدء خدمات الشبكة: {error}", "receive_exception": "حدث خطأ أثناء الاستقبال: {error}",
+        "data_error": "تعذر استقبال البيانات: {error}", "message_error": "تعذر إرسال الرسالة: {error}",
+        "receive_rejected": "تم رفض استقبال {name} من {device}.", "send_rejected": "رفض {device} استقبال {name}.",
+        "folder_set": "تم تعيين مجلد الاستلام: {path}", "partial_send": "لم يتم إرسال الملف كاملًا.",
+        "connection_not_accepted": "لم يؤكد الجهاز استلام الرسالة.",
+    },
+    "en": {
+        "language": "Language", "arabic": "Arabic", "english": "English", "french": "French",
+        "recipient": "Recipient", "message_hint": "Type a message...", "speed": "Upload: {upload} | Download: {download}",
+        "network_starting": "Starting network services...", "searching": "Searching for devices on the network...",
+        "request_file": "Incoming file request", "device": "Device: {value}", "file": "File: {value}",
+        "size": "Size: {value:.2f} MB", "accept": "Accept", "reject": "Reject",
+        "receiving": "Receiving {name}: {percent}%", "sending": "Sending {name}: {percent}%",
+        "settings": "Settings", "device_name": "Network device name", "port": "TCP port",
+        "theme": "App theme", "system": "System", "dark": "Dark", "light": "Light",
+        "receive_folder": "Receive folder", "folder_example": "Folder for received files",
+        "choose_folder": "Choose save folder", "save": "Save", "cancel": "Cancel",
+        "save_error": "Could not save settings: {error}", "invalid_port": "Enter a valid port from 1 to 65535.",
+        "devices": "Discovered devices", "activity": "Activity", "files": "Send / receive files",
+        "send_message": "Send message", "choose_file": "Choose a file to send", "open_folder": "Open received files folder",
+        "select_receiver": "Choose a receiving device", "send": "Send", "search_empty": "No devices found to send the file to.",
+        "no_message_device": "Select a connected device to send a message.", "network_connected": "Connected at {ip}:{port}",
+        "network_ready": "Device discovery and file reception started.", "receive_ok": "Received {name} and saved to {path}.",
+        "receive_failed": "Could not receive file: {error}", "transfer_failed": "Could not send file: {error}",
+        "sent_ok": "Sent {name} to {device} successfully.", "rejected": "{device} rejected {name}.",
+        "disconnected": "Connection lost while receiving {name}.", "message_to": "To {device}: {message}",
+        "network_error": "Could not start network services: {error}", "receive_exception": "Error while receiving: {error}",
+        "data_error": "Could not receive data: {error}", "message_error": "Could not send message: {error}",
+        "receive_rejected": "Reception of {name} from {device} was rejected.", "send_rejected": "{device} rejected {name}.",
+        "folder_set": "Receive folder set to: {path}", "partial_send": "The file was not sent completely.",
+        "connection_not_accepted": "The device did not confirm receipt of the message.",
+    },
+    "fr": {
+        "language": "Langue", "arabic": "Arabe", "english": "Anglais", "french": "Français",
+        "recipient": "Destinataire", "message_hint": "Écrivez un message...", "speed": "Envoi : {upload} | Réception : {download}",
+        "network_starting": "Démarrage des services réseau...", "searching": "Recherche des appareils sur le réseau...",
+        "request_file": "Demande de réception de fichier", "device": "Appareil : {value}", "file": "Fichier : {value}",
+        "size": "Taille : {value:.2f} Mo", "accept": "Accepter", "reject": "Refuser",
+        "receiving": "Réception de {name} : {percent} %", "sending": "Envoi de {name} : {percent} %",
+        "settings": "Paramètres", "device_name": "Nom de l’appareil sur le réseau", "port": "Port TCP",
+        "theme": "Thème de l’application", "system": "Système", "dark": "Sombre", "light": "Clair",
+        "receive_folder": "Dossier de réception", "folder_example": "Dossier pour les fichiers reçus",
+        "choose_folder": "Choisir le dossier d’enregistrement", "save": "Enregistrer", "cancel": "Annuler",
+        "save_error": "Impossible d’enregistrer les paramètres : {error}", "invalid_port": "Entrez un port valide entre 1 et 65535.",
+        "devices": "Appareils détectés", "activity": "Activité", "files": "Envoyer / recevoir des fichiers",
+        "send_message": "Envoyer un message", "choose_file": "Choisir un fichier à envoyer", "open_folder": "Ouvrir le dossier des fichiers reçus",
+        "select_receiver": "Choisir un appareil destinataire", "send": "Envoyer", "search_empty": "Aucun appareil détecté pour l’envoi.",
+        "no_message_device": "Choisissez un appareil connecté pour envoyer un message.", "network_connected": "Connecté sur {ip}:{port}",
+        "network_ready": "Recherche des appareils et réception de fichiers démarrées.", "receive_ok": "{name} reçu et enregistré dans {path}.",
+        "receive_failed": "Impossible de recevoir le fichier : {error}", "transfer_failed": "Impossible d’envoyer le fichier : {error}",
+        "sent_ok": "{name} envoyé à {device}.", "rejected": "{device} a refusé {name}.",
+        "disconnected": "Connexion interrompue pendant la réception de {name}.", "message_to": "À {device} : {message}",
+        "network_error": "Impossible de démarrer les services réseau : {error}", "receive_exception": "Erreur pendant la réception : {error}",
+        "data_error": "Impossible de recevoir les données : {error}", "message_error": "Impossible d’envoyer le message : {error}",
+        "receive_rejected": "La réception de {name} depuis {device} a été refusée.", "send_rejected": "{device} a refusé {name}.",
+        "folder_set": "Dossier de réception défini : {path}", "partial_send": "Le fichier n’a pas été envoyé intégralement.",
+        "connection_not_accepted": "L’appareil n’a pas confirmé la réception du message.",
+    },
+}
 
 
 def local_file_path(value):
@@ -90,32 +172,47 @@ def load_app_settings(defaults: dict) -> dict:
                 port INTEGER NOT NULL,
                 theme TEXT NOT NULL,
                 receive_dir_mode TEXT NOT NULL,
-                receive_dir TEXT NOT NULL
+                receive_dir TEXT NOT NULL,
+                language TEXT NOT NULL DEFAULT 'ar'
             )"""
         )
+        columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(app_settings)")
+        }
+        if "language" not in columns:
+            connection.execute(
+                "ALTER TABLE app_settings ADD COLUMN language TEXT NOT NULL DEFAULT 'ar'"
+            )
         connection.execute(
             """INSERT OR IGNORE INTO app_settings
-               (id, device_name, port, theme, receive_dir_mode, receive_dir)
-               VALUES (1, ?, ?, ?, ?, ?)""",
+               (id, device_name, port, theme, receive_dir_mode, receive_dir, language)
+               VALUES (1, ?, ?, ?, ?, ?, ?)""",
             (
                 defaults["device_name"], defaults["port"], defaults["theme"],
-                defaults["receive_dir_mode"], defaults["receive_dir"],
+                defaults["receive_dir_mode"], defaults["receive_dir"], defaults["language"],
             ),
         )
         row = connection.execute(
-            """SELECT device_name, port, theme, receive_dir_mode, receive_dir
+            """SELECT device_name, port, theme, receive_dir_mode, receive_dir, language
                FROM app_settings WHERE id = 1"""
         ).fetchone()
     values = dict(zip(
-        ("device_name", "port", "theme", "receive_dir_mode", "receive_dir"), row
+        ("device_name", "port", "theme", "receive_dir_mode", "receive_dir", "language"), row
     ))
     if not 1 <= int(values["port"]) <= 65535:
         values["port"] = defaults["port"]
     if values["theme"] not in ("system", "dark", "light"):
         values["theme"] = defaults["theme"]
+    if values["language"] not in ("ar", "en", "fr"):
+        values["language"] = defaults["language"]
     if values["receive_dir_mode"] not in ("downloads", "custom"):
         values["receive_dir_mode"] = defaults["receive_dir_mode"]
     if str(values["receive_dir"]).startswith("<java.io.File at "):
+        values["receive_dir"] = defaults["receive_dir"]
+        values["receive_dir_mode"] = "downloads"
+    if ANDROID_RUNTIME and str(values["receive_dir"]).replace("\\", "/").lower().startswith(
+        "c:/storage/emulated/0/"
+    ):
         values["receive_dir"] = defaults["receive_dir"]
         values["receive_dir_mode"] = "downloads"
     return values
@@ -133,22 +230,24 @@ def save_app_settings(settings: dict) -> None:
                 port INTEGER NOT NULL,
                 theme TEXT NOT NULL,
                 receive_dir_mode TEXT NOT NULL,
-                receive_dir TEXT NOT NULL
+                receive_dir TEXT NOT NULL,
+                language TEXT NOT NULL DEFAULT 'ar'
             )"""
         )
         connection.execute(
             """INSERT INTO app_settings
-               (id, device_name, port, theme, receive_dir_mode, receive_dir)
-               VALUES (1, ?, ?, ?, ?, ?)
+               (id, device_name, port, theme, receive_dir_mode, receive_dir, language)
+               VALUES (1, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(id) DO UPDATE SET
                    device_name=excluded.device_name,
                    port=excluded.port,
                    theme=excluded.theme,
                    receive_dir_mode=excluded.receive_dir_mode,
-                   receive_dir=excluded.receive_dir""",
+                   receive_dir=excluded.receive_dir,
+                   language=excluded.language""",
             (
                 settings["device_name"], settings["port"], settings["theme"],
-                settings["receive_dir_mode"], settings["receive_dir"],
+                settings["receive_dir_mode"], settings["receive_dir"], settings["language"],
             ),
         )
 
@@ -241,6 +340,11 @@ def get_received_files_dir() -> Path:
             )
             download_dir = local_file_path(public_downloads)
             if download_dir is not None:
+                # Some Android Python runtimes expose the emulated storage path
+                # with a Windows drive prefix. Map it back to Android's real path.
+                raw_path = str(download_dir).replace("\\", "/")
+                if raw_path.lower().startswith("c:/storage/emulated/0/"):
+                    download_dir = Path("/storage/emulated/0/Download")
                 return ensure_writable_directory(download_dir)
         except Exception:
             pass
@@ -248,24 +352,42 @@ def get_received_files_dir() -> Path:
             external_dir = context.getExternalFilesDir(env.DIRECTORY_DOWNLOADS)
             download_dir = local_file_path(external_dir)
             if download_dir is not None:
+                raw_path = str(download_dir).replace("\\", "/")
+                if raw_path.lower().startswith("c:/storage/emulated/0/"):
+                    download_dir = Path("/storage/emulated/0/Download")
                 return ensure_writable_directory(download_dir)
         except Exception:
             pass
 
-    for base in (
-        Path.home() / "Downloads",
-        Path("/storage/emulated/0/Download"),
-        Path("/sdcard/Download"),
-        Path("/mnt/sdcard/Download"),
-        Path("/storage/emulated/0"),
-        Path("/sdcard"),
-        Path("/mnt/sdcard"),
-    ):
+    if ANDROID_RUNTIME:
+        candidates = (
+            Path("/storage/emulated/0/Download"),
+            Path("/sdcard/Download"),
+            Path("/mnt/sdcard/Download"),
+        )
+    else:
+        candidates = [Path.home() / "Downloads"]
+        if sys.platform.startswith("linux"):
+            user_dirs = Path.home() / ".config" / "user-dirs.dirs"
+            try:
+                for line in user_dirs.read_text(encoding="utf-8").splitlines():
+                    if line.startswith("XDG_DOWNLOAD_DIR="):
+                        value = line.partition("=")[2].strip().strip('"')
+                        value = value.replace("$HOME", str(Path.home()))
+                        candidates.insert(0, Path(value).expanduser())
+                        break
+            except OSError:
+                pass
+        candidates = tuple(candidates)
+
+    for base in candidates:
         try:
             return ensure_writable_directory(base)
         except OSError:
             continue
 
+    if ANDROID_RUNTIME:
+        return Path("/storage/emulated/0/Download")
     return Path.home() / "Downloads"
 
 
@@ -305,6 +427,10 @@ def normalize_receive_dir(raw_path: str | Path | None) -> Path:
     if not raw_path or not str(raw_path).strip():
         return get_received_files_dir()
     if isinstance(raw_path, str) and raw_path.startswith("<java.io.File at "):
+        return get_received_files_dir()
+    if ANDROID_RUNTIME and str(raw_path).replace("\\", "/").lower().startswith(
+        "c:/storage/emulated/0/"
+    ):
         return get_received_files_dir()
     candidate = local_file_path(raw_path)
     if candidate is None:
@@ -394,6 +520,8 @@ def open_receive_directory(page: ft.Page, config=None):
 
 def main(page: ft.Page):
     """Build the interface and start discovery, transfer, and speed services."""
+    global ANDROID_RUNTIME
+    ANDROID_RUNTIME = page.platform == ft.PagePlatform.ANDROID
     page.title = "LocalSend Pro"
     page.vertical_alignment = ft.MainAxisAlignment.END
     page.window.top = 100
@@ -425,6 +553,7 @@ def main(page: ft.Page):
         "device_name": f"Device_{HOSTNAME}",
         "port": DEFAULT_PORT,
         "theme": "system",
+        "language": "ar",
         "receive_dir_mode": "downloads",
         "receive_dir": str(get_received_files_dir()),
     }
@@ -432,6 +561,12 @@ def main(page: ft.Page):
         app_config.update(load_app_settings(app_config))
     except (OSError, sqlite3.Error, ValueError) as error:
         print(f"Could not load saved settings: {error}")
+
+    def tr(key, **values):
+        language = app_config.get("language", "ar")
+        return TRANSLATIONS.get(language, TRANSLATIONS["ar"]).get(key, TRANSLATIONS["ar"].get(key, key)).format(**values)
+
+    page.rtl = app_config["language"] == "ar"
     device_private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     discovered_devices = {}
     devices_lock = threading.RLock()
@@ -461,17 +596,17 @@ def main(page: ft.Page):
         ),
     )
     message_device_dropdown = ft.Dropdown(
-        label="المستلم", width=150, options=[], disabled=True,rtl=True
+        label=tr("recipient"), width=150, options=[], disabled=True,rtl=page.rtl
     )
     message_input = ft.TextField(
-        hint_text="اكتب رسالة...", expand=True, min_lines=1, max_lines=3,rtl=True
+        hint_text=tr("message_hint"), expand=True, min_lines=1, max_lines=3,rtl=page.rtl
     )
     progress_bar = ft.ProgressBar(value=0, visible=False, height=8, border_radius=4)
     progress_text = ft.Text("", size=11, weight=ft.FontWeight.BOLD, visible=False)
     speed_status_text = ft.Text(
-        "رفع: 0 B/s | تحميل: 0 B/s", size=11, color=ft.Colors.GREY,rtl=True
+        tr("speed", upload="0 B/s", download="0 B/s"), size=11, color=ft.Colors.GREY,rtl=page.rtl
     )
-    network_status_text = ft.Text("جارٍ بدء خدمات الشبكة...", size=11,rtl=True)
+    network_status_text = ft.Text(tr("network_starting"), size=11,rtl=page.rtl)
 
     def apply_theme(theme_choice):
         """Apply the selected theme to the current page."""
@@ -500,7 +635,7 @@ def main(page: ft.Page):
                             text,
                             size=13,
                             color=ft.Colors.WHITE if is_me or color else ft.Colors.ON_SURFACE,
-                            selectable=True,rtl=True
+                            selectable=True,rtl=page.rtl
                         ),
                         padding=12,
                         border_radius=10,
@@ -594,7 +729,7 @@ def main(page: ft.Page):
                 ft.Row(
                     [
                         ft.ProgressRing(width=16, height=16, stroke_width=2),
-                        ft.Text("جارٍ البحث عن أجهزة على الشبكة...", size=12,rtl=True),
+                        ft.Text(tr("searching"), size=12,rtl=page.rtl),
                     ],
                     spacing=8,
                     auto_scroll=True,
@@ -748,19 +883,19 @@ def main(page: ft.Page):
 
                     request_dialog = ft.AlertDialog(
                         modal=True,
-                        title=ft.Text("طلب استقبال ملف"),
+                        title=ft.Text(tr("request_file")),
                         content=ft.Text(
-                            f"الجهاز: {source_ip}\nالملف: {filename}\n"
-                            f"الحجم: {filesize / (1024 * 1024):.2f} MB"
+                            f"{tr('device', value=source_ip)}\n{tr('file', value=filename)}\n"
+                            f"{tr('size', value=filesize / (1024 * 1024))}"
                         ),
                         actions=[
                             ft.Button(
-                                "استقبال",
+                                tr("accept"),
                                 icon=ft.Icons.CHECK,
                                 on_click=lambda _: answer(True),
                             ),
                             ft.OutlinedButton(
-                                "رفض",
+                                tr("reject"),
                                 icon=ft.Icons.CLOSE,
                                 on_click=lambda _: answer(False),
                             ),
@@ -780,7 +915,7 @@ def main(page: ft.Page):
                         await writer.drain()
                         handshake_replied = True
                         add_activity(
-                            f"تم رفض استقبال {filename} من {source_ip}.", color="red"
+                            tr("receive_rejected", name=filename, device=source_ip), color="red"
                         )
                         return
 
@@ -790,7 +925,7 @@ def main(page: ft.Page):
                     progress_bar.visible = True
                     progress_text.visible = True
                     progress_bar.value = 0
-                    progress_text.value = f"استلام {filename}: 0%"
+                    progress_text.value = tr("receiving", name=filename, percent=0)
                     page.update()
 
                     receive_dir = get_receive_dir(app_config)
@@ -826,7 +961,7 @@ def main(page: ft.Page):
                                 now = time.monotonic()
                                 if now - last_ui_update >= 0.1 or received_bytes == filesize:
                                     progress_bar.value = received_bytes / filesize if filesize else 1
-                                    progress_text.value = f"استلام {filename}: {int(progress_bar.value * 100)}%"
+                                    progress_text.value = tr("receiving", name=filename, percent=int(progress_bar.value * 100))
                                     page.update()
                                     last_ui_update = now
                         else:
@@ -839,14 +974,14 @@ def main(page: ft.Page):
                                 now = time.monotonic()
                                 if now - last_ui_update >= 0.1 or received_bytes == filesize:
                                     progress_bar.value = received_bytes / filesize if filesize else 1
-                                    progress_text.value = f"استلام {filename}: {int(progress_bar.value * 100)}%"
+                                    progress_text.value = tr("receiving", name=filename, percent=int(progress_bar.value * 100))
                                     page.update()
                                     last_ui_update = now
 
                     if received_bytes != filesize:
                         partial_path.unlink(missing_ok=True)
                         add_activity(
-                            f"انقطع الاتصال أثناء استقبال {filename}.", color="red"
+                            tr("disconnected", name=filename), color="red"
                         )
                         return
 
@@ -856,7 +991,7 @@ def main(page: ft.Page):
                         writer.write(b"DONE")
                         await writer.drain()
                     add_activity(
-                        f"تم استلام {filename} وحفظه في {received_path}.", color="green"
+                        tr("receive_ok", name=filename, path=received_path), color="green"
                     )
                     await play_notification()
                 except (OSError, ValueError, asyncio.TimeoutError) as error:
@@ -868,7 +1003,7 @@ def main(page: ft.Page):
                             pass
                     if "partial_path" in locals():
                         partial_path.unlink(missing_ok=True)
-                    add_activity(f"تعذر استقبال الملف: {error}", color="red")
+                    add_activity(tr("receive_failed", error=error), color="red")
                 except Exception as error:
                     if not handshake_replied:
                         try:
@@ -878,7 +1013,7 @@ def main(page: ft.Page):
                             pass
                     if "partial_path" in locals():
                         partial_path.unlink(missing_ok=True)
-                    add_activity(f"حدث خطأ أثناء الاستقبال: {error}", color="red")
+                    add_activity(tr("receive_exception", error=error), color="red")
                 finally:
                     progress_bar.visible = False
                     progress_text.visible = False
@@ -890,7 +1025,7 @@ def main(page: ft.Page):
                     await writer.drain()
                 except OSError:
                     pass
-            add_activity(f"تعذر استقبال البيانات: {error}", color="red")
+            add_activity(tr("data_error", error=error), color="red")
         finally:
             writer.close()
             try:
@@ -998,9 +1133,9 @@ def main(page: ft.Page):
                 browser=browser,
             )
             network_status_text.value = (
-                f"متصل على {local_ip}:{app_config['port']}"
+                tr("network_connected", ip=local_ip, port=app_config["port"])
             )
-            add_activity("بدأ اكتشاف الأجهزة واستقبال الملفات.", color="green")
+            add_activity(tr("network_ready"), color="green")
         except Exception as error:
             if browser is not None:
                 await browser.async_cancel()
@@ -1009,8 +1144,8 @@ def main(page: ft.Page):
             if server is not None:
                 server.close()
                 await server.wait_closed()
-            network_status_text.value = f"تعذر بدء خدمات الشبكة: {error}"
-            add_activity(f"تعذر بدء خدمات الشبكة: {error}", color="red")
+            network_status_text.value = tr("network_error", error=error)
+            add_activity(tr("network_error", error=error), color="red")
         page.update()
 
     async def monitor_live_speed():
@@ -1032,7 +1167,7 @@ def main(page: ft.Page):
             upload = max(0, current.bytes_sent - previous.bytes_sent) / elapsed
             download = max(0, current.bytes_recv - previous.bytes_recv) / elapsed
             speed_status_text.value = (
-                f"رفع: {format_speed(upload)} | تحميل: {format_speed(download)}"
+                tr("speed", upload=format_speed(upload), download=format_speed(download))
             )
             page.update()
             previous = current
@@ -1124,7 +1259,7 @@ def main(page: ft.Page):
                 None,
             )
         if target is None:
-            add_activity("اختر جهازًا متصلًا لإرسال الرسالة.", color="red")
+            add_activity(tr("no_message_device"), color="red")
             return
 
         payload = message.encode("utf-8")
@@ -1166,13 +1301,13 @@ def main(page: ft.Page):
                 reader.readexactly(2), timeout=10
             )
             if acknowledgement != b"OK":
-                raise OSError("لم يؤكد الجهاز استلام الرسالة.")
+                raise OSError(tr("connection_not_accepted"))
 
-            add_activity(f"إلى {target['name']}: {message}", is_me=True)
+            add_activity(tr("message_to", device=target["name"], message=message), is_me=True)
             message_input.value = ""
             page.update()
         except Exception as error:
-            add_activity(f"تعذر إرسال الرسالة: {error}", color="red")
+            add_activity(tr("message_error", error=error), color="red")
         finally:
             if writer is not None:
                 writer.close()
@@ -1252,7 +1387,7 @@ def main(page: ft.Page):
                     "أغلق جهاز الاستقبال الاتصال قبل قبول الملف. أعد المحاولة وتأكد من أن التطبيق مفتوح على الجهاز الآخر."
                 ) from error
             if response != b"ACCEPT":
-                add_activity(f"رفض {target['name']} استقبال {filename}.", color="red")
+                add_activity(tr("send_rejected", device=target["name"], name=filename), color="red")
                 return
 
             writer.write(wrapped_key + nonce_prefix)
@@ -1260,7 +1395,7 @@ def main(page: ft.Page):
             progress_bar.visible = True
             progress_text.visible = True
             progress_bar.value = 0
-            progress_text.value = f"إرسال {filename}: 0%"
+            progress_text.value = tr("sending", name=filename, percent=0)
             page.update()
 
             sent_bytes = 0
@@ -1280,16 +1415,16 @@ def main(page: ft.Page):
                 if now - last_ui_update >= 0.1 or sent_bytes == filesize:
                     progress_bar.value = sent_bytes / filesize if filesize else 1
                     progress_text.value = (
-                        f"إرسال {filename}: {int(progress_bar.value * 100)}%"
+                    tr("sending", name=filename, percent=int(progress_bar.value * 100))
                     )
                     page.update()
                     last_ui_update = now
 
             if sent_bytes != filesize:
-                raise OSError("لم يتم إرسال الملف كاملًا.")
-            add_activity(f"تم إرسال {filename} إلى {target['name']} بنجاح.", is_me=True)
+                raise OSError(tr("partial_send"))
+            add_activity(tr("sent_ok", name=filename, device=target["name"]), is_me=True)
         except Exception as error:
-            add_activity(f"تعذر إرسال الملف: {error}", color="red")
+            add_activity(tr("transfer_failed", error=error), color="red")
         finally:
             if file_handle is not None:
                 file_handle.close()
@@ -1308,7 +1443,7 @@ def main(page: ft.Page):
         with devices_lock:
             devices = list(discovered_devices.values())
         if not devices:
-            add_activity("لم يتم اكتشاف أي جهاز لإرسال الملف إليه.", color="red")
+            add_activity(tr("search_empty"), color="red")
             return
 
         options = [
@@ -1319,7 +1454,7 @@ def main(page: ft.Page):
             for index, device in enumerate(devices)
         ]
         device_dropdown = ft.Dropdown(
-            label="جهاز الاستقبال",
+                label=tr("select_receiver"),
             options=options,
             value=options[0].key,
         )
@@ -1335,15 +1470,15 @@ def main(page: ft.Page):
         page.show_dialog(
             ft.AlertDialog(
                 modal=True,
-                title=ft.Text("اختر جهاز الاستقبال"),
+                title=ft.Text(tr("select_receiver")),
                 content=ft.Column([device_dropdown], height=85, tight=True),
                 actions=[
                     ft.Button(
-                        "إرسال",
+                    tr("send"),
                         icon=ft.Icons.SEND_ROUNDED,
                         on_click=confirm_send
                     ),
-                    ft.OutlinedButton("إلغاء", on_click=close_selector),
+                ft.OutlinedButton(tr("cancel"), on_click=close_selector),
                 ],
             )
         )
@@ -1367,7 +1502,7 @@ def main(page: ft.Page):
             app_config["receive_dir"] = str(safe_receive_dir(event.path))
             app_config["receive_dir_mode"] = "custom"
             save_app_settings(app_config)
-            add_activity(f"تم تعيين مجلد الاستلام: {app_config['receive_dir']}", color="green")
+            add_activity(tr("folder_set", path=app_config["receive_dir"]), color="green")
 
     async def pick_receive_directory(_):
         """Pick a destination folder using the OS-supported directory chooser."""
@@ -1377,31 +1512,40 @@ def main(page: ft.Page):
                 app_config["receive_dir"] = str(safe_receive_dir(selected))
                 app_config["receive_dir_mode"] = "custom"
                 save_app_settings(app_config)
-                add_activity(f"تم تعيين مجلد الاستلام: {app_config['receive_dir']}", color="green")
+                add_activity(tr("folder_set", path=app_config["receive_dir"]), color="green")
                 return
         open_receive_directory(page, app_config)
 
     async def open_settings(_):
-        """Show device name, transfer port, and theme settings."""
+        """Show device, language, transfer port, and theme settings."""
         name_input = ft.TextField(
-            label="اسم الجهاز على الشبكة", value=app_config["device_name"]
+            label=tr("device_name"), value=app_config["device_name"]
         )
         port_input = ft.TextField(
-            label="منفذ TCP", value=str(app_config["port"])
+            label=tr("port"), value=str(app_config["port"])
         )
         theme_dropdown = ft.Dropdown(
-            label="مظهر التطبيق",
+            label=tr("theme"),
             value=app_config["theme"],
             options=[
-                ft.dropdown.Option("system", "حسب النظام"),
-                ft.dropdown.Option("dark", "داكن"),
-                ft.dropdown.Option("light", "فاتح"),
+                ft.dropdown.Option("system", tr("system")),
+                ft.dropdown.Option("dark", tr("dark")),
+                ft.dropdown.Option("light", tr("light")),
+            ],
+        )
+        language_dropdown = ft.Dropdown(
+            label=tr("language"),
+            value=app_config["language"],
+            options=[
+                ft.dropdown.Option("ar", tr("arabic")),
+                ft.dropdown.Option("en", tr("english")),
+                ft.dropdown.Option("fr", tr("french")),
             ],
         )
         receive_dir_input = ft.TextField(
-            label="مسار مجلد الاستلام",
+            label=tr("receive_folder"),
             value=app_config.get("receive_dir") or str(get_received_files_dir()),
-            hint_text="مثال: C:/Users/Name/Downloads أو /home/user/Downloads",
+            hint_text=tr("folder_example"),
             expand=True,
             max_lines=1,
         )
@@ -1422,7 +1566,7 @@ def main(page: ft.Page):
                 if not 1 <= new_port <= 65535:
                     raise ValueError
             except (TypeError, ValueError):
-                add_activity("أدخل رقم منفذ صحيحًا بين 1 و65535.", color="red")
+                add_activity(tr("invalid_port"), color="red")
                 return
 
             custom_dir = (receive_dir_input.value or "").strip()
@@ -1437,12 +1581,28 @@ def main(page: ft.Page):
             app_config["device_name"] = name_input.value.strip() or f"Device_{HOSTNAME}"
             app_config["port"] = new_port
             app_config["theme"] = theme_dropdown.value
+            app_config["language"] = language_dropdown.value
             try:
                 save_app_settings(app_config)
             except (OSError, sqlite3.Error) as error:
-                add_activity(f"تعذر حفظ الإعدادات: {error}", color="red")
+                add_activity(tr("save_error", error=error), color="red")
                 return
             page.pop_dialog()
+            page.rtl = app_config["language"] == "ar"
+            message_device_dropdown.label = tr("recipient")
+            message_input.hint_text = tr("message_hint")
+            message_device_dropdown.rtl = page.rtl
+            message_input.rtl = page.rtl
+            speed_status_text.rtl = page.rtl
+            network_status_text.rtl = page.rtl
+            devices_heading.value = tr("devices")
+            activity_heading.value = tr("activity")
+            files_caption.value = tr("files")
+            settings_button.tooltip = tr("settings")
+            file_button.tooltip = tr("choose_file")
+            open_receive_folder_button.tooltip = tr("open_folder")
+            send_message_button.tooltip = tr("send_message")
+            await refresh_devices()
             apply_theme(app_config["theme"])
             await restart_network()
 
@@ -1450,12 +1610,13 @@ def main(page: ft.Page):
             ft.AlertDialog(
                 modal=True,
                 title=ft.Row(
-                    [ft.Icon(ft.Icons.SETTINGS), ft.Text("الإعدادات")], spacing=8
+                    [ft.Icon(ft.Icons.SETTINGS), ft.Text(tr("settings"))], spacing=8
                 ),
                 content=ft.Column(
                     [
                         name_input,
                         port_input,
+                        language_dropdown,
                         theme_dropdown,
                         ft.Row(
                             [
@@ -1465,7 +1626,7 @@ def main(page: ft.Page):
                                 ),
                                 ft.IconButton(
                                     icon=ft.Icons.FOLDER_OPEN_ROUNDED,
-                                    tooltip="اختيار مجلد الحفظ",
+                                    tooltip=tr("choose_folder"),
                                     on_click=choose_directory_from_browser,
                                     width=42,
                                     height=42,
@@ -1476,13 +1637,13 @@ def main(page: ft.Page):
                             vertical_alignment=ft.CrossAxisAlignment.CENTER,
                         ),
                     ],
-                    height=320,
+                    height=370,
                     tight=True,
                 ),
                 actions=[
-                    ft.Button("حفظ", icon=ft.Icons.SAVE, on_click=save_settings),
+                    ft.Button(tr("save"), icon=ft.Icons.SAVE, on_click=save_settings),
                     ft.OutlinedButton(
-                        "إلغاء", on_click=lambda _: page.pop_dialog()
+                        tr("cancel"), on_click=lambda _: page.pop_dialog()
                     ),
                 ],
             )
@@ -1501,22 +1662,30 @@ def main(page: ft.Page):
 
     settings_button = ft.IconButton(
         icon=ft.Icons.SETTINGS_ROUNDED,
-        tooltip="الإعدادات",
+        tooltip=tr("settings"),
         on_click=open_settings,
     )
     file_button = ft.IconButton(
         icon=ft.Icons.FOLDER_OPEN_ROUNDED,
         icon_color=ft.Colors.BLUE,
-        tooltip="اختيار ملف للإرسال",
+        tooltip=tr("choose_file"),
         on_click=None if pick_files_action else pick_file,
         action=pick_files_action,
     )
     open_receive_folder_button = ft.IconButton(
         icon=ft.Icons.DOWNLOAD_ROUNDED,
         icon_color=ft.Colors.GREEN,
-        tooltip="فتح مجلد استقبال الملفات",
+        tooltip=tr("open_folder"),
         on_click=pick_receive_directory,
     )
+    devices_heading = ft.Text(tr("devices"), size=12, weight=ft.FontWeight.BOLD, rtl=page.rtl)
+    activity_heading = ft.Text(tr("activity"), size=12, weight=ft.FontWeight.BOLD, rtl=page.rtl)
+    send_message_button = ft.IconButton(
+        icon=ft.Icons.SEND_ROUNDED,
+        tooltip=tr("send_message"),
+        on_click=send_text_message,
+    )
+    files_caption = ft.Text(tr("files"), expand=True, rtl=page.rtl)
 
     page.add(
         ft.Container(padding=12,
@@ -1535,23 +1704,19 @@ def main(page: ft.Page):
             )
         ),
         network_status_text,
-        ft.Text("الاجهزة المكتشفة ", size=12, weight=ft.FontWeight.BOLD,rtl=True),
+        devices_heading,
         ft.GestureDetector(
             content=devices_list,
             on_scroll=handle_mouse_scroll,
         ),
         ft.Divider(height=1),
-        ft.Text("النشاط", size=12, weight=ft.FontWeight.BOLD,rtl=True),
+        activity_heading,
         chat_list,
         ft.Row(
             [
                 message_device_dropdown,
                 message_input,
-                ft.IconButton(
-                    icon=ft.Icons.SEND_ROUNDED,
-                    tooltip="إرسال رسالة",
-                    on_click=send_text_message,
-                rtl=True),
+                send_message_button,
             ],
             spacing=6,
         ),
@@ -1562,7 +1727,7 @@ def main(page: ft.Page):
             [
                 file_button,
                 open_receive_folder_button,
-                ft.Text("إرسال / استقبال الملفات", expand=True, rtl=True),
+                files_caption,
             ]
         ),
     )
