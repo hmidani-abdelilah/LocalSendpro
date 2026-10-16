@@ -38,13 +38,41 @@ DEFAULT_PORT = 50006
 CHUNK_SIZE = 64 * 1024
 
 
+def local_file_path(value):
+    """Convert a picker path or Android java.io.File proxy to a real path."""
+    if value is None:
+        return None
+    if isinstance(value, os.PathLike):
+        return Path(value)
+    if isinstance(value, str):
+        return Path(value)
+    for method_name in ("getAbsolutePath", "getPath"):
+        method = getattr(value, method_name, None)
+        if callable(method):
+            path = method()
+            if path:
+                return Path(str(path))
+    return None
+
+
+def ensure_writable_directory(path: Path) -> Path:
+    """Create a directory and verify that this process can write to it."""
+    path.mkdir(parents=True, exist_ok=True)
+    probe = path / f".localsend_write_test_{os.urandom(4).hex()}.tmp"
+    probe.write_bytes(b"")
+    probe.unlink(missing_ok=True)
+    return path
+
+
 def get_settings_db_path() -> Path:
     """Return a writable per-user database path, including Android app storage."""
     try:
         context, _ = get_android_context()
         app_files = context.getFilesDir()
         if app_files is not None:
-            return Path(str(app_files)) / "localsend_settings.sqlite3"
+            app_files_path = local_file_path(app_files)
+            if app_files_path is not None:
+                return app_files_path / "localsend_settings.sqlite3"
     except Exception:
         pass
     return Path.home() / ".localsendpro" / "settings.sqlite3"
@@ -87,6 +115,9 @@ def load_app_settings(defaults: dict) -> dict:
         values["theme"] = defaults["theme"]
     if values["receive_dir_mode"] not in ("downloads", "custom"):
         values["receive_dir_mode"] = defaults["receive_dir_mode"]
+    if str(values["receive_dir"]).startswith("<java.io.File at "):
+        values["receive_dir"] = defaults["receive_dir"]
+        values["receive_dir_mode"] = "downloads"
     return values
 
 
@@ -95,6 +126,16 @@ def save_app_settings(settings: dict) -> None:
     database_path = get_settings_db_path()
     database_path.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(database_path, timeout=10) as connection:
+        connection.execute(
+            """CREATE TABLE IF NOT EXISTS app_settings (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                device_name TEXT NOT NULL,
+                port INTEGER NOT NULL,
+                theme TEXT NOT NULL,
+                receive_dir_mode TEXT NOT NULL,
+                receive_dir TEXT NOT NULL
+            )"""
+        )
         connection.execute(
             """INSERT INTO app_settings
                (id, device_name, port, theme, receive_dir_mode, receive_dir)
@@ -186,40 +227,30 @@ def format_speed(bytes_per_second):
     return f"{bytes_per_second:.0f} B/s"
 
 
-def local_file_path(value):
-    """Convert a picker path, including Android's java.io.File proxy, to Path."""
-    if value is None:
-        return None
-    if isinstance(value, os.PathLike):
-        return Path(value)
-    if isinstance(value, str):
-        return Path(value)
-    for method_name in ("getAbsolutePath", "getPath"):
-        method = getattr(value, method_name, None)
-        if callable(method):
-            path = method()
-            if path:
-                return Path(str(path))
-    return None
-
-
 def get_received_files_dir() -> Path:
     """Return the system Downloads directory for the current platform."""
     try:
         context, autoclass = get_android_context()
         env = autoclass("android.os.Environment")
-        public_downloads = env.getExternalStoragePublicDirectory(env.DIRECTORY_DOWNLOADS)
-        if public_downloads is not None:
-            download_dir = Path(str(public_downloads))
-            download_dir.mkdir(parents=True, exist_ok=True)
-            return download_dir
-        external_dir = context.getExternalFilesDir(env.DIRECTORY_DOWNLOADS)
-        if external_dir is not None:
-            download_dir = Path(str(external_dir))
-            download_dir.mkdir(parents=True, exist_ok=True)
-            return download_dir
     except Exception:
         pass
+    else:
+        try:
+            public_downloads = env.getExternalStoragePublicDirectory(
+                env.DIRECTORY_DOWNLOADS
+            )
+            download_dir = local_file_path(public_downloads)
+            if download_dir is not None:
+                return ensure_writable_directory(download_dir)
+        except Exception:
+            pass
+        try:
+            external_dir = context.getExternalFilesDir(env.DIRECTORY_DOWNLOADS)
+            download_dir = local_file_path(external_dir)
+            if download_dir is not None:
+                return ensure_writable_directory(download_dir)
+        except Exception:
+            pass
 
     for base in (
         Path.home() / "Downloads",
@@ -231,8 +262,7 @@ def get_received_files_dir() -> Path:
         Path("/mnt/sdcard"),
     ):
         try:
-            base.mkdir(parents=True, exist_ok=True)
-            return base
+            return ensure_writable_directory(base)
         except OSError:
             continue
 
@@ -241,13 +271,12 @@ def get_received_files_dir() -> Path:
 
 def safe_receive_dir(path: str | Path | None) -> Path:
     """Validate a chosen directory and return the system Downloads fallback if not writable."""
-    candidate = normalize_receive_dir(str(path) if path is not None else None)
+    if isinstance(path, str) and path.startswith("<java.io.File at "):
+        candidate = get_received_files_dir()
+    else:
+        candidate = normalize_receive_dir(path)
     try:
-        candidate.mkdir(parents=True, exist_ok=True)
-        probe = candidate / ".localsend_write_test.tmp"
-        probe.touch(exist_ok=True)
-        probe.unlink(missing_ok=True)
-        return candidate
+        return ensure_writable_directory(candidate)
     except (OSError, PermissionError):
         return get_received_files_dir()
 
@@ -271,11 +300,16 @@ def choose_folder_path(initial_dir: str | Path | None = None) -> str | None:
         return None
 
 
-def normalize_receive_dir(raw_path: str | None) -> Path:
+def normalize_receive_dir(raw_path: str | Path | None) -> Path:
     """Resolve a custom receive-directory path into an absolute path."""
     if not raw_path or not str(raw_path).strip():
         return get_received_files_dir()
-    candidate = Path(str(raw_path).strip()).expanduser()
+    if isinstance(raw_path, str) and raw_path.startswith("<java.io.File at "):
+        return get_received_files_dir()
+    candidate = local_file_path(raw_path)
+    if candidate is None:
+        return get_received_files_dir()
+    candidate = candidate.expanduser()
     if not candidate.is_absolute():
         candidate = Path.cwd() / candidate
     return candidate
@@ -284,13 +318,12 @@ def normalize_receive_dir(raw_path: str | None) -> Path:
 def get_receive_dir(config=None) -> Path:
     """Return the current target directory for incoming files."""
     config = config or {}
-    explicit_path = config.get("receive_dir")
-    if explicit_path:
-        return safe_receive_dir(explicit_path)
-
     mode = config.get("receive_dir_mode", "downloads")
     if mode == "downloads":
         return get_received_files_dir()
+    explicit_path = config.get("receive_dir")
+    if explicit_path:
+        return safe_receive_dir(explicit_path)
     return safe_receive_dir(Path.cwd() / "received_files")
 
 
@@ -1159,7 +1192,7 @@ def main(page: ft.Page):
         if not isinstance(name_value, str):
             get_name = getattr(name_value, "getName", None)
             name_value = get_name() if callable(get_name) else str(name_value)
-        filename = Path(str(name_value)).name
+        filename = Path(str(name_value)).name.replace("\r", "_").replace("\n", "_")
 
         try:
             if file_path:
@@ -1191,16 +1224,13 @@ def main(page: ft.Page):
                 await asyncio.wait_for(reader.readexactly(public_size), timeout=10)
             )
             aes_key = os.urandom(32)
-            nonce_prefix = os.urandom(4)
+            # Keep the established FILEE header so already-installed receivers
+            # continue to show the incoming-file approval dialog.
+            nonce_prefix = os.urandom(8)
             wrapped_key = encrypt_message(
                 receiver_public_key, base64.urlsafe_b64encode(aes_key).decode("ascii")
             )
-            encoded_filename = base64.urlsafe_b64encode(
-                filename.encode("utf-8")
-            ).decode("ascii")
-            writer.write(
-                f"FILEE64:{encoded_filename}:{filesize}:{len(wrapped_key)}\n".encode("ascii")
-            )
+            writer.write(f"FILEE:{filename}:{filesize}:{len(wrapped_key)}\n".encode("utf-8"))
             await writer.drain()
             try:
                 response = await asyncio.wait_for(reader.readexactly(6), timeout=35)
@@ -1244,16 +1274,6 @@ def main(page: ft.Page):
 
             if sent_bytes != filesize:
                 raise OSError("لم يتم إرسال الملف كاملًا.")
-            try:
-                transfer_result = await asyncio.wait_for(
-                    reader.readexactly(4), timeout=60
-                )
-            except asyncio.IncompleteReadError as error:
-                raise OSError(
-                    "انقطع اتصال جهاز الاستقبال قبل اكتمال حفظ الملف."
-                ) from error
-            if transfer_result != b"DONE":
-                raise OSError("لم يؤكد جهاز الاستقبال حفظ الملف كاملًا.")
             add_activity(f"تم إرسال {filename} إلى {target['name']} بنجاح.", is_me=True)
         except Exception as error:
             add_activity(f"تعذر إرسال الملف: {error}", color="red")
