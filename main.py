@@ -823,6 +823,12 @@ def main(page: ft.Page):
                                 await asyncio.to_thread(output_file.write, data)
                                 received_bytes += len(data)
                                 chunk_index += 1
+                                now = time.monotonic()
+                                if now - last_ui_update >= 0.1 or received_bytes == filesize:
+                                    progress_bar.value = received_bytes / filesize if filesize else 1
+                                    progress_text.value = f"استلام {filename}: {int(progress_bar.value * 100)}%"
+                                    page.update()
+                                    last_ui_update = now
                         else:
                             while received_bytes < filesize:
                                 data = await reader.read(min(CHUNK_SIZE, filesize - received_bytes))
@@ -830,17 +836,12 @@ def main(page: ft.Page):
                                     break
                                 await asyncio.to_thread(output_file.write, data)
                                 received_bytes += len(data)
-                            now = time.monotonic()
-                            if now - last_ui_update >= 0.1 or received_bytes == filesize:
-                                progress_bar.value = (
-                                    received_bytes / filesize if filesize else 1
-                                )
-                                progress_text.value = (
-                                    f"استلام {filename}: "
-                                    f"{int(progress_bar.value * 100)}%"
-                                )
-                                page.update()
-                                last_ui_update = now
+                                now = time.monotonic()
+                                if now - last_ui_update >= 0.1 or received_bytes == filesize:
+                                    progress_bar.value = received_bytes / filesize if filesize else 1
+                                    progress_text.value = f"استلام {filename}: {int(progress_bar.value * 100)}%"
+                                    page.update()
+                                    last_ui_update = now
 
                     if received_bytes != filesize:
                         partial_path.unlink(missing_ok=True)
@@ -1096,6 +1097,11 @@ def main(page: ft.Page):
                 f"تعذر إبقاء الشبكة نشطة عند إطفاء الشاشة: {error}",
                 color="red",
             )
+
+    async def handle_page_disconnect(_):
+        """Keep Android network services alive if the UI connection drops temporarily."""
+        if page.platform != ft.PagePlatform.ANDROID:
+            await stop_session(None)
 
     async def handle_app_lifecycle_state_change(e: ft.AppLifecycleStateChangeEvent):
         if e.state == ft.AppLifecycleState.DETACH:
@@ -1561,7 +1567,7 @@ def main(page: ft.Page):
         ),
     )
 
-    page.on_disconnect = stop_session
+    page.on_disconnect = handle_page_disconnect
     page.on_close = stop_session
     page.on_app_lifecycle_state_change = handle_app_lifecycle_state_change
     keep_android_network_active()
@@ -1571,3 +1577,4 @@ def main(page: ft.Page):
 
 if __name__ == "__main__":
     ft.run(main , assets_dir="assets")
+
