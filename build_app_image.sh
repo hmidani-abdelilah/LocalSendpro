@@ -133,7 +133,9 @@ fi
 
 install -d "$APPDIR/usr/bin" "$APPDIR/usr/share/icons/hicolor/256x256/apps"
 cp -a "$APP_ROOT"/. "$APPDIR/usr/bin/"
-ln -sf "$APP_BIN_NAME" "$APPDIR/usr/bin/$APP_ID"
+if [[ "$APP_BIN_NAME" != "$APP_ID" ]]; then
+    ln -sf "$APP_BIN_NAME" "$APPDIR/usr/bin/$APP_ID"
+fi
 install -m 644 assets/icon.png "$APPDIR/usr/share/icons/hicolor/256x256/apps/$APP_ID.png"
 install -m 644 assets/icon.png "$APPDIR/$APP_ID.png"
 ln -sf "$APP_ID.png" "$APPDIR/.DirIcon"

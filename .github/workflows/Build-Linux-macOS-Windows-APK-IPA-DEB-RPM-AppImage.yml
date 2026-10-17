@@ -124,11 +124,18 @@ jobs:
           test -n "$rpm_file"
           cp "$rpm_file" dist/packages/
 
-      - name: Upload DEB and RPM packages
+      - name: Upload DEB package
         uses: actions/upload-artifact@v4
         with:
-          name: deb-rpm-build
-          path: dist/packages/*
+          name: deb-build
+          path: dist/packages/*.deb
+          if-no-files-found: error
+
+      - name: Upload RPM package
+        uses: actions/upload-artifact@v4
+        with:
+          name: rpm-build
+          path: dist/packages/*.rpm
           if-no-files-found: error
 
   package-appimage:
@@ -198,7 +205,9 @@ jobs:
 
           install -d "$appdir/usr/bin" "$appdir/usr/share/icons/hicolor/256x256/apps"
           cp -a "$app_root"/. "$appdir/usr/bin/"
-          ln -s "$app_bin_name" "$appdir/usr/bin/$app_id"
+          if [[ "$app_bin_name" != "$app_id" ]]; then
+            ln -s "$app_bin_name" "$appdir/usr/bin/$app_id"
+          fi
           install -m 644 assets/icon.png "$appdir/usr/share/icons/hicolor/256x256/apps/$app_id.png"
           install -m 644 assets/icon.png "$appdir/$app_id.png"
           ln -s "$app_id.png" "$appdir/.DirIcon"
