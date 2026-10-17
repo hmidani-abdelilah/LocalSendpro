@@ -104,7 +104,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes \
-            alien debhelper dh-python dpkg-dev fakeroot python3-all \
+            alien build-essential debhelper dh-python dpkg-dev fakeroot python3-all \
             python3-pip python3-venv rpm rsync
 
       - name: Build DEB and RPM packages
@@ -156,7 +156,7 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.22.2"
+          flutter-version: "3.44.8"
 
       - name: Install AppImage build dependencies
         run: |
