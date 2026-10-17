@@ -31,6 +31,10 @@ LocalSendpro-main/
 ├── localsend_zeroconf.py      # نسخة مساعدة لاكتشاف الأجهزة عبر Zeroconf
 ├── pyproject.toml             # إعدادات Flet وبناء المنصات
 ├── requirements.txt           # حزم Python المطلوبة
+├── LocalSendpro.appdata.xml   # بيانات التطبيق لمتاجر Linux
+├── build_deb_rmp.sh           # بناء حزمتَي DEB وRPM
+├── build_app_image.sh         # بناء ملف AppImage
+├── debian/                    # ملفات تغليف Debian
 ├── README.md
 ├── LICENSE
 ├── LocalSendPro.png           # صورة المشروع
@@ -45,7 +49,7 @@ LocalSendpro-main/
 
 ## تنزيل التطبيق
 
-نزّل الإصدار المناسب لجهازك من صفحة [Releases](../../releases). قد تختلف صيغة الملف حسب النظام؛ ملفات Linux وmacOS وWindows وAndroid تُرفق كأرشيفات بناء.
+نزّل الإصدار المناسب لجهازك من صفحة [Releases](../../releases). يتضمن إصدار Linux 2.2.0 ملفات `.deb` و`.rpm` و`.AppImage`، بالإضافة إلى أرشيفات البناء للمنصات الأخرى.
 
 بناء iOS من GitHub Actions قد ينتج ملف `.xcarchive`. يتطلب إنشاء ملف `.ipa` قابلًا للتثبيت إعداد شهادة توقيع Apple وملف Provisioning Profile.
 
@@ -77,6 +81,24 @@ python main.py
 
 اسمح للتطبيق بالوصول إلى الشبكة المحلية في إعدادات جدار الحماية. يستخدم التطبيق المنفذ `50006` للاتصال بين الأجهزة.
 
+## بناء حزم Linux
+
+تعمل سكربتات البناء على Debian/Ubuntu وFedora. في أول تشغيل، ثبّت الاعتماديات المناسبة لتوزيعتك ثم ابنِ الحزم:
+
+```bash
+./build_deb_rmp.sh --install-deps
+./build_app_image.sh --install-deps 2.2.0
+```
+
+في مرات البناء اللاحقة لا تحتاج إلى إعادة تثبيت الاعتماديات:
+
+```bash
+./build_deb_rmp.sh
+./build_app_image.sh 2.2.0
+```
+
+ينتج السكربت الأول ملفَي `.deb` و`.rpm`، وينتج الثاني ملف `.AppImage`. تحفظ جميع المخرجات في `dist/packages/`. يتطلب خيار `--install-deps` صلاحية `sudo` ويستخدم `apt` على Debian/Ubuntu أو `dnf` على Fedora.
+
 ## التشفير
 
 يشفّر التطبيق محتوى الرسائل والملفات أثناء النقل باستخدام AES-GCM، ويستخدم RSA-OAEP مع SHA-256 لتغليف مفتاح AES وإرساله إلى الجهاز المستقبِل. تُشفّر الملفات على دفعات، لذلك لا يحتاج التطبيق إلى تحميل الملف كاملاً إلى الذاكرة.
@@ -98,8 +120,8 @@ python main.py
 يبدأ GitHub Actions بناء جميع المنصات وينشر الملفات في صفحة Releases عند دفع وسم إصدار بصيغة `vX.Y.Z` إلى GitHub. مثال:
 
 ```bash
-git tag v1.0.1
-git push origin v1.0.1
+git tag v2.2.0
+git push origin v2.2.0
 ```
 
 تأكد من نجاح وظائف البناء في تبويب **Actions**؛ بعد اكتمالها، سيظهر الإصدار وملفاته في **Releases**.
@@ -145,6 +167,10 @@ LocalSendpro-main/
 ├── localsend_zeroconf.py      # Helper version using Zeroconf discovery
 ├── pyproject.toml             # Flet and platform build configuration
 ├── requirements.txt           # Required Python packages
+├── LocalSendpro.appdata.xml   # Linux application metadata
+├── build_deb_rmp.sh           # DEB and RPM package builder
+├── build_app_image.sh         # AppImage builder
+├── debian/                    # Debian packaging files
 ├── README.md
 ├── LICENSE
 ├── LocalSendPro.png           # Project image
@@ -159,7 +185,7 @@ LocalSendpro-main/
 
 ## Download
 
-Download the build for your device from the [Releases](../../releases) page. The attached file format may vary by platform; Linux, macOS, Windows, and Android builds are published as build archives.
+Download the build for your device from the [Releases](../../releases) page. The Linux 2.2.0 release includes `.deb`, `.rpm`, and `.AppImage` files, in addition to build archives for the other platforms.
 
 A GitHub Actions iOS build may produce an `.xcarchive`. Creating an installable `.ipa` requires an Apple signing certificate and a Provisioning Profile.
 
@@ -191,6 +217,24 @@ python main.py
 
 Allow the app to access the local network in your firewall settings. The app uses TCP port `50006` for device-to-device connections.
 
+## Build Linux packages
+
+The build scripts support Debian/Ubuntu and Fedora. On the first run, install the dependencies for your distribution and build the packages:
+
+```bash
+./build_deb_rmp.sh --install-deps
+./build_app_image.sh --install-deps 2.2.0
+```
+
+For later builds, no dependency installation is needed:
+
+```bash
+./build_deb_rmp.sh
+./build_app_image.sh 2.2.0
+```
+
+The first script produces `.deb` and `.rpm` packages; the second produces an `.AppImage`. All output files are placed in `dist/packages/`. The `--install-deps` option requires `sudo` and uses `apt` on Debian/Ubuntu or `dnf` on Fedora.
+
 ## Encryption
 
 The app encrypts message and file contents in transit with AES-GCM. It uses RSA-OAEP with SHA-256 to wrap the AES key and send it to the receiving device. Files are encrypted in chunks, so the entire file does not need to be loaded into memory.
@@ -212,8 +256,8 @@ Android uses the shared `Download` folder. Windows uses the user's `Downloads` f
 GitHub Actions builds the supported platforms and publishes the artifacts to Releases when a version tag in the form `vX.Y.Z` is pushed to GitHub. For example:
 
 ```bash
-git tag v1.0.1
-git push origin v1.0.1
+git tag v2.2.0
+git push origin v2.2.0
 ```
 
 Check that the build jobs succeed in the **Actions** tab. When they finish, the release and its artifacts will appear under **Releases**.
