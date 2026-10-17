@@ -22,8 +22,6 @@ echo "Building $APP_NAME $VERSION for Linux..."
 rm -rf "$BUILD_ROOT" "$APPDIR"
 flet build linux --build-version="$VERSION"
 
-# Flet places the executable beside its bundled files. Locate it instead of
-# assuming a machine-specific architecture directory name.
 APP_BIN="$(find "$BUILD_ROOT" -type f -perm -111 ! -path '*/lib/*' -print -quit)"
 if [ -z "$APP_BIN" ]; then
     echo "Could not locate the executable produced by Flet in $BUILD_ROOT" >&2
