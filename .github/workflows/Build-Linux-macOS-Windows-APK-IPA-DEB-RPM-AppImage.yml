@@ -162,7 +162,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes \
-            libgtk-3-dev ninja-build wget \
+            file libgtk-3-dev ninja-build wget \
             libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
             gstreamer1.0-plugins-good
           python -m pip install --upgrade pip
@@ -178,9 +178,16 @@ jobs:
           appdir=AppDir
 
           rm -rf "$build_root" "$appdir" dist/packages
-          flet build linux --build-version="${{ steps.version.outputs.value }}"
+          flet build linux --yes --no-rich-output --build-version="${{ steps.version.outputs.value }}"
 
-          app_bin="$(find "$build_root" -type f -perm -111 ! -path '*/lib/*' -print -quit)"
+          app_bin=""
+          while IFS= read -r candidate; do
+            if file -b "$candidate" | grep -q 'ELF.*executable'; then
+              app_bin="$candidate"
+              break
+            fi
+          done < <(find "$build_root" -type f -perm -111 ! -path '*/lib/*' \
+            ! -name '*.so' ! -name '*.so.*')
           test -n "$app_bin"
           app_root="$(dirname "$app_bin")"
           app_bin_name="$(basename "$app_bin")"

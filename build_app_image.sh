@@ -36,14 +36,14 @@ install_dependencies() {
             require_sudo
             sudo apt-get update
             sudo apt-get install --yes \
-                libgtk-3-dev ninja-build wget pkg-config python3-pip \
+                file libgtk-3-dev ninja-build wget pkg-config python3-pip \
                 libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
                 gstreamer1.0-plugins-good
             ;;
         fedora)
             require_sudo
             sudo dnf install --assumeyes \
-                gtk3-devel ninja-build wget pkgconf-pkg-config python3-pip \
+                file gtk3-devel ninja-build wget pkgconf-pkg-config python3-pip \
                 gstreamer1-devel gstreamer1-plugins-base-devel \
                 gstreamer1-plugins-good
             ;;
@@ -88,6 +88,10 @@ command -v wget >/dev/null || {
     echo "wget is required. Run: $0 --install-deps" >&2
     exit 1
 }
+command -v file >/dev/null || {
+    echo "file is required. Run: $0 --install-deps" >&2
+    exit 1
+}
 command -v pkg-config >/dev/null || {
     echo "pkg-config is required. Run: $0 --install-deps" >&2
     exit 1
@@ -104,7 +108,16 @@ find "$OUTPUT_DIR" -maxdepth 1 -type f -name '*.AppImage' -delete
 find . -maxdepth 1 -type f -name '*.AppImage' ! -name 'linuxdeploy-*.AppImage' -delete
 flet build linux --yes --no-rich-output --build-version="$VERSION"
 
-APP_BIN="$(find "$BUILD_ROOT" -type f -perm -111 ! -path '*/lib/*' -print -quit)"
+# Python extension modules may have their executable bit set. Choose the Flet
+# runner only if it is an ELF executable, never an ELF shared object (.so).
+APP_BIN=""
+while IFS= read -r candidate; do
+    if file -b "$candidate" | grep -q 'ELF.*executable'; then
+        APP_BIN="$candidate"
+        break
+    fi
+done < <(find "$BUILD_ROOT" -type f -perm -111 ! -path '*/lib/*' \
+    ! -name '*.so' ! -name '*.so.*')
 if [[ -z "$APP_BIN" ]]; then
     echo "Could not locate the executable produced by Flet in $BUILD_ROOT." >&2
     exit 1
