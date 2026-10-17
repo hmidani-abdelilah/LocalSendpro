@@ -161,7 +161,10 @@ jobs:
       - name: Install AppImage build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install --yes libgtk-3-dev ninja-build wget
+          sudo apt-get install --yes \
+            libgtk-3-dev ninja-build wget \
+            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            gstreamer1.0-plugins-good
           python -m pip install --upgrade pip
           python -m pip install flet-cli
 
