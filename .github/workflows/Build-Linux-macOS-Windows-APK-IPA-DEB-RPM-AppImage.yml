@@ -258,4 +258,3 @@ jobs:
           fail_on_unmatched_files: true
           files: |
             release-assets/*
-            release-assets/**/*
