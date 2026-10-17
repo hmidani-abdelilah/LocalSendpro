@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=2.2.0
+Type=Application
+Name=LocalSend Pro
+Comment=Securely share files and messages on your local network
+Exec=localsend-pro
+Icon=localsend-pro
+Terminal=false
+Categories=Network;FileTransfer;Utility;
+Keywords=local;network;file;transfer;share;
+StartupNotify=true

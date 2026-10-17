@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.localsend.pro</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>AGPL-3.0-or-later</project_license>
+  <name>LocalSend Pro</name>
+  <summary>Securely share files and messages on your local network</summary>
+  <summary xml:lang="ar">مشاركة الملفات والرسائل بأمان عبر الشبكة المحلية</summary>
+
+  <developer id="com.localsend">
+    <name>Abdelilah Hmidani</name>
+  </developer>
+
+  <description>
+    <p>
+      LocalSend Pro lets you share files and text messages directly with devices
+      on the same local network. Nearby devices are discovered automatically
+      using Zeroconf, without requiring an internet connection or cloud account.
+    </p>
+    <p>
+      File and message contents are encrypted during transfer. You can approve
+      incoming files before they are saved, choose the receive folder, and use
+      the interface in Arabic, English, or French.
+    </p>
+    <p xml:lang="ar">
+      يتيح لك LocalSend Pro مشاركة الملفات والرسائل النصية مباشرةً مع الأجهزة
+      المتصلة بالشبكة المحلية نفسها. يكتشف التطبيق الأجهزة القريبة تلقائياً عبر
+      Zeroconf من دون الحاجة إلى اتصال بالإنترنت أو حساب سحابي.
+    </p>
+    <p xml:lang="ar">
+      تُشفّر محتويات الملفات والرسائل أثناء النقل. يمكنك الموافقة على الملفات
+      الواردة قبل حفظها، واختيار مجلد الاستقبال، واستخدام الواجهة بالعربية أو
+      الإنجليزية أو الفرنسية.
+    </p>
+  </description>
+
+  <launchable type="desktop-id">com.localsend.pro.desktop</launchable>
+  <provides>
+    <binary>localsend-pro</binary>
+  </provides>
+
+  <url type="homepage">https://github.com/hmidani-abdelilah/LocalSendpro</url>
+  <url type="bugtracker">https://github.com/hmidani-abdelilah/LocalSendpro/issues</url>
+  <url type="translate">https://github.com/hmidani-abdelilah/LocalSendpro</url>
+
+  <content_rating type="oars-1.1" />
+
+  <releases>
+    <release version="2.2.0" type="stable" date="2026-10-17" />
+  </releases>
+</component>

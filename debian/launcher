@@ -1,0 +1,13 @@
+#!/bin/sh
+set -eu
+
+APP_DIR=/usr/share/localsend-pro
+VENV="$APP_DIR/venv"
+
+if [ ! -x "$VENV/bin/python" ]; then
+    echo "LocalSend Pro is not configured. Reinstall the package." >&2
+    exit 1
+fi
+
+cd "$APP_DIR"
+exec "$VENV/bin/python" main.py "$@"

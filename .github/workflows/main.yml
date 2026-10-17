@@ -1,4 +1,4 @@
-name: All Builds (Linux, macOS, Windows, Android, IPA)
+name: All Builds (Linux, macOS, Windows, Android, IPA, DEB, RPM, AppImage)
 
 on:
   push:
@@ -72,7 +72,7 @@ jobs:
         run: |
           version="${GITHUB_REF_NAME#v}"
           if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            version="0.1.0"
+            version="2.1.1"
           fi
           echo "value=$version" >> "$GITHUB_OUTPUT"
 
@@ -93,10 +93,78 @@ jobs:
           path: ${{ steps.build.outputs.archive-path }}
           if-no-files-found: error
 
+  package-deb-rpm:
+    name: Build DEB and RPM
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install package build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes \
+            alien debhelper dh-python dpkg-dev fakeroot python3-all \
+            python3-pip python3-venv rpm rsync
+
+      - name: Build DEB and RPM packages
+        run: ./build_deb_rmp.sh
+
+      - name: Upload DEB and RPM packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: deb-rpm-build
+          path: dist/packages/*
+          if-no-files-found: error
+
+  package-appimage:
+    name: Build AppImage
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set build version
+        id: version
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            version="2.1.1"
+          fi
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.22.2"
+
+      - name: Install AppImage build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes libgtk-3-dev ninja-build
+          python -m pip install --upgrade pip
+          python -m pip install flet-cli
+
+      - name: Build AppImage
+        run: ./build_app_image.sh "${{ steps.version.outputs.value }}"
+
+      - name: Upload AppImage
+        uses: actions/upload-artifact@v4
+        with:
+          name: appimage-build
+          path: dist/packages/*.AppImage
+          if-no-files-found: error
+
   publish-release:
     name: Publish GitHub Release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
+    needs: [build, package-deb-rpm, package-appimage]
     runs-on: ubuntu-latest
     steps:
       - name: Download build archives

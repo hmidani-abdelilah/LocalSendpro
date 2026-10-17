@@ -3,7 +3,7 @@ product = "LocalSend Pro"
 
 [project]
 name = "localsend-pro"
-version = "0.1.0"
+version = "2.2.0"
 requires-python = ">=3.12"
 dependencies = ["flet", "flet-audio", "zeroconf", "cryptography"]
 

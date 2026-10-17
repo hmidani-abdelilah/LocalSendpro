@@ -1,0 +1,5 @@
+localsend-pro (2.2.0-1) unstable; urgency=medium
+
+  * Initial Debian package for LocalSend Pro.
+
+ -- Abdelilah Hmidani <hmidaniabdelilah92@gmail.com>  Sat, 17 Oct 2026 19:02:00 +0100

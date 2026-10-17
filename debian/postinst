@@ -1,0 +1,23 @@
+#!/bin/sh
+set -e
+
+APP_DIR=/usr/share/localsend-pro
+VENV="$APP_DIR/venv"
+
+case "$1" in
+    configure)
+        # Keep Python packages isolated from the system Python installation.
+        if [ ! -x "$VENV/bin/python" ]; then
+            python3 -m venv "$VENV"
+        fi
+        "$VENV/bin/python" -m pip install --disable-pip-version-check --no-cache-dir \
+            -r "$APP_DIR/requirements-linux.txt"
+        command -v update-desktop-database >/dev/null 2>&1 && \
+            update-desktop-database -q /usr/share/applications || true
+        command -v gtk-update-icon-cache >/dev/null 2>&1 && \
+            gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor || true
+        ;;
+esac
+
+#DEBHELPER#
+exit 0

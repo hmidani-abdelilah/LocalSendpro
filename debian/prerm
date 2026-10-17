@@ -1,0 +1,8 @@
+#!/bin/sh
+set -e
+
+# The virtual environment is package payload below /usr/share/localsend-pro.
+# It is removed with the package. User settings in ~/.localsendpro are retained.
+
+#DEBHELPER#
+exit 0

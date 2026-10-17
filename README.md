@@ -1,6 +1,6 @@
 ﻿# LocalSend Pro
 <p align="center">
-  <img src="https://raw.githubusercontent.com/hmidani-abdelilah/LocalSendpro/refs/heads/main/LocalSendPro.png" alt="LocalSend Pro">
+  <img src="https://raw.githubusercontent.com/hmidani-abdelilah/LocalSendpro/refs/heads/main/LocalSendPro-AR.png" alt="LocalSend Pro">
 </p>
 
 
@@ -118,7 +118,7 @@ git push origin v1.0.1
 # English version
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/hmidani-abdelilah/LocalSendpro/refs/heads/main/LocalSendPro.png" alt="LocalSend Pro">
+  <img src="https://raw.githubusercontent.com/hmidani-abdelilah/LocalSendpro/refs/heads/main/LocalSendPro-EN.png" alt="LocalSend Pro">
 </p>
 
 LocalSend Pro lets you share files and text messages directly between devices connected to the same local network. It discovers nearby devices automatically using Zeroconf.

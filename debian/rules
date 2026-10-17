@@ -1,0 +1,38 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@ --with python3
+
+override_dh_auto_build:
+	# LocalSend Pro is a Python/Flet application; dependencies are installed
+	# into an application-specific virtual environment during package setup.
+
+override_dh_auto_install:
+	install -d debian/localsend-pro/usr/share/localsend-pro
+	install -d debian/localsend-pro/usr/bin
+	install -d debian/localsend-pro/usr/share/applications
+	install -d debian/localsend-pro/usr/share/icons/hicolor/256x256/apps
+	install -d debian/localsend-pro/usr/share/metainfo
+
+	rsync -a \
+		--exclude='.git' \
+		--exclude='.github' \
+		--exclude='.venv' \
+		--exclude='__pycache__' \
+		--exclude='build' \
+		--exclude='dist' \
+		--exclude='AppDir' \
+		--exclude='debian' \
+		--exclude='test' \
+		--exclude='copy code' \
+		./ debian/localsend-pro/usr/share/localsend-pro/
+
+	printf '%s\n' 'flet' 'flet-audio' 'psutil' 'zeroconf' 'cryptography' \
+		> debian/localsend-pro/usr/share/localsend-pro/requirements-linux.txt
+	install -m 644 assets/icon.png \
+		debian/localsend-pro/usr/share/icons/hicolor/256x256/apps/localsend-pro.png
+	install -m 755 debian/launcher debian/localsend-pro/usr/bin/localsend-pro
+	install -m 644 debian/localsend-pro.desktop \
+		debian/localsend-pro/usr/share/applications/com.localsend.pro.desktop
+	install -m 644 LocalSendpro.appdata.xml \
+		debian/localsend-pro/usr/share/metainfo/com.localsend.pro.metainfo.xml

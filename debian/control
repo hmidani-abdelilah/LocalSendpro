@@ -1,0 +1,15 @@
+Source: localsend-pro
+Section: net
+Priority: optional
+Maintainer: Abdelilah Hmidani <hmidaniabdelilah92@gmail.com>
+Build-Depends: debhelper-compat (= 13), dh-python, python3-all, python3-venv, python3-pip, rsync
+Standards-Version: 4.7.0
+Rules-Requires-Root: no
+
+Package: localsend-pro
+Architecture: all
+Depends: ${misc:Depends}, ${python3:Depends}, python3 (>= 3.12), python3-venv
+Description: secure local-network file and text sharing application
+ LocalSend Pro discovers devices on the local network and lets users send files
+ and text messages directly between them. Transfers are encrypted and incoming
+ files require the recipient's approval.
