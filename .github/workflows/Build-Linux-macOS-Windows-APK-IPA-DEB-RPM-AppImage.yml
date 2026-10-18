@@ -86,11 +86,28 @@ jobs:
           build-number: ${{ github.run_number }}
           build-version: ${{ steps.version.outputs.value }}
 
+      - name: Prepare build artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist/build
+          archive='${{ steps.build.outputs.archive-path }}'
+          if [[ '${{ matrix.target }}' == 'apk' ]]; then
+            mkdir -p dist/apk
+            unzip -q "$archive" -d dist/apk/extracted
+            apk_file="$(find dist/apk/extracted -type f -name '*.apk' -print -quit)"
+            test -n "$apk_file"
+            cp "$apk_file" dist/apk/LocalSend_PRO.apk
+            (cd dist/apk && sha1sum LocalSend_PRO.apk > LocalSend_PRO.apk.sha1)
+          else
+            cp "$archive" "dist/build/LocalSend_PRO-${{ matrix.target }}.zip"
+          fi
+
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.target }}-build
-          path: ${{ steps.build.outputs.archive-path }}
+          path: ${{ matrix.target == 'apk' && 'dist/apk/*' || 'dist/build/*' }}
           if-no-files-found: error
 
   package-deb-rpm:
