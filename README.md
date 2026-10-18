@@ -270,17 +270,6 @@ Settings are stored in a SQLite database named `localsend_settings.sqlite3`. On 
 
 Android uses the shared `Download` folder. Windows uses the user's `Downloads` folder, and macOS uses `~/Downloads`. On Linux, the app uses the download folder configured through XDG when available, otherwise it uses `~/Downloads`. You can change the receive folder in Settings.
 
-## Automated release builds
-
-GitHub Actions builds the supported platforms and publishes the artifacts to Releases when a version tag in the form `vX.Y.Z` is pushed to GitHub. For example:
-
-```bash
-git tag v2.2.0
-git push origin v2.2.0
-```
-
-Check that the build jobs succeed in the **Actions** tab. When they finish, the release and its artifacts will appear under **Releases**.
-
 ## Technology
 
 - [Flet](https://flet.dev/) for the user interface and cross-platform builds.
