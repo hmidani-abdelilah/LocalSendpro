@@ -1,4 +1,23 @@
 ﻿# LocalSend Pro
+
+<div align="center">
+   
+[![Python](https://img.shields.io/badge/Python-3.14-blueviolet.svg?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+[![GPL License](https://img.shields.io/badge/License-gplv3-BD0000.svg?style=for-the-badge&logo=GPL3)](https://github.com/hmidani-abdelilah/LocalSendpro/tree/main?tab=GPL-3.0-1-ov-file)
+[![linux](https://img.shields.io/badge/linux-Distribution-FCC624.svg?style=for-the-badge&logo=linux)](https://github.com/hmidani-abdelilah/LocalSendpro/releases)
+[![Windows](https://img.shields.io/badge/Windows-OS-blue.svg?style=for-the-badge&logo=wine)](https://github.com/hmidani-abdelilah/LocalSendpro/releases)
+[![Ubuntu](https://img.shields.io/badge/Ubuntu-PPA-E95420.svg?style=for-the-badge&logo=ubuntu)](https://launchpad.net/~kiraxq/+archive/ubuntu/ppa)
+[![Appimage](https://img.shields.io/badge/appimage-D39FB9.svg?style=for-the-badge&logo=appimage)](https://github.com/hmidani-abdelilah/LocalSendpro/releases)
+[![opendesktop](https://img.shields.io/badge/freedesktopdotorg-dA90D9.svg?style=for-the-badge&logo=freedesktopdotorg)](https://www.opendesktop.org/p/2379514)
+[![Bugs Report](https://img.shields.io/badge/Issues-Report%20a%20bug-important?style=for-the-badge&logo=github&logoColor=white)](https://github.com/hmidani-abdelilah/LocalSendpro/issues)<br>
+<a href="https://github.com/hmidani-abdelilah/LocalSendpro/tree/main/.github/workflows" target="_blank"><img alt="Build Status" src="https://raw.githubusercontent.com/hmidani-abdelilah/Media_Downloader/c198b34776a74979d43498c161e968d85e2084f7/.github/workflows/badge.svg" /></a><br>
+<a href="https://github.com/hmidani-abdelilah/LocalSendpro/releases/latest"><img alt="Get it on GitHub" src="https://raw.githubusercontent.com/hmidani-abdelilah/Media_Downloader/refs/heads/main/get-github.png" height="45" /></a>
+
+**[English](#-english) · [العربية](#-العربية)**
+
+
+</div>   
+
 <p align="center">
   <img src="https://raw.githubusercontent.com/hmidani-abdelilah/LocalSendpro/refs/heads/main/LocalSendPro-AR.png" alt="LocalSend Pro">
 </p>
