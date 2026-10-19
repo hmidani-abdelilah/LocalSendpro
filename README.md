@@ -118,11 +118,15 @@ python main.py
 
 ينتج السكربت الأول ملفَي `.deb` و`.rpm`، وينتج الثاني ملف `.AppImage`. تحفظ جميع المخرجات في `dist/packages/`. يتطلب خيار `--install-deps` صلاحية `sudo` ويستخدم `apt` على Debian/Ubuntu أو `dnf` على Fedora.
 
-## التشفير
+## التشفير والتحقق من هوية الجهاز
 
 يشفّر التطبيق محتوى الرسائل والملفات أثناء النقل باستخدام AES-GCM، ويستخدم RSA-OAEP مع SHA-256 لتغليف مفتاح AES وإرساله إلى الجهاز المستقبِل. تُشفّر الملفات على دفعات، لذلك لا يحتاج التطبيق إلى تحميل الملف كاملاً إلى الذاكرة.
 
-يُنشأ مفتاح RSA في ذاكرة التطبيق عند تشغيله ولا يُحفظ على القرص. يتبادل الجهازان المفتاح العام عبر الشبكة المحلية من دون التحقق من بصمته؛ لذلك يحمي التشفير المحتوى من التنصت السلبي، لكنه لا يضمن هوية الجهاز ضد طرف نشط يعترض الاتصال ويستبدل المفتاح. كما تبقى بيانات النقل مثل اسم الملف وحجمه ظاهرة على الشبكة.
+يحفظ كل جهاز مفتاح RSA الخاص به محليًا في `device_identity.pem` بجانب قاعدة الإعدادات، ويعرض بصمة مفتاحه العام من نوع SHA-256 في **الإعدادات**. لا يُرسل المفتاح الخاص عبر الشبكة.
+
+عند الإرسال إلى جهاز للمرة الأولى، يعرض التطبيق بصمة المفتاح العام الذي استلمه. قارنها مباشرةً بالبصمة المعروضة في إعدادات الجهاز المستقبِل، باستخدام قناة موثوقة مستقلة عن الشبكة المحلية، ثم اختر توثيق المفتاح. بعد ذلك يحفظ التطبيق البصمة ويراجعها تلقائيًا عند الاتصالات التالية. إذا تغيّرت البصمة، يحجب الإرسال إلى أن تقارن البصمة الجديدة بالجهاز نفسه وتوافق صراحةً على توثيق المفتاح الجديد؛ يؤدي الإلغاء إلى إيقاف الإرسال.
+
+اكتشاف الأجهزة عبر Zeroconf ومعرّف الجهاز المعلن على الشبكة لا يثبتان الهوية وحدهما. لذلك يلزم إجراء المقارنة المستقلة عند أول اتصال، وكذلك عند ظهور تحذير تغيّر البصمة. يجب تحديث التطبيق على الجهازين للاستفادة من المفاتيح والمعرّفات الثابتة؛ قد لا تحتفظ الإصدارات الأقدم بهوية ثابتة بين مرات التشغيل. يحمي التشفير محتوى الرسائل والملفات بعد التحقق، بينما تبقى بيانات النقل مثل اسم الملف وحجمه ظاهرة على الشبكة.
 
 يتطلب الإرسال المشفّر تشغيل إصدار متوافق من التطبيق على الجهازين. لا يقبل التطبيق الرسائل أو الملفات الواردة عبر بروتوكول الإصدارات القديمة غير المشفّر.
 
@@ -243,11 +247,15 @@ For later builds, no dependency installation is needed:
 
 The first script produces `.deb` and `.rpm` packages; the second produces an `.AppImage`. All output files are placed in `dist/packages/`. The `--install-deps` option requires `sudo` and uses `apt` on Debian/Ubuntu or `dnf` on Fedora.
 
-## Encryption
+## Encryption and device identity verification
 
 The app encrypts message and file contents in transit with AES-GCM. It uses RSA-OAEP with SHA-256 to wrap the AES key and send it to the receiving device. Files are encrypted in chunks, so the entire file does not need to be loaded into memory.
 
-An RSA key pair is generated in memory when the app starts and is not saved to disk. Devices exchange public keys over the local network without verifying their fingerprints. Encryption therefore protects content from passive eavesdropping, but it does not authenticate a device against an active attacker who intercepts the connection and replaces the key. Transfer metadata such as file names and sizes remains visible on the network.
+Each device stores its RSA private key locally in `device_identity.pem` beside the settings database, and shows the SHA-256 fingerprint of its public key in **Settings**. The private key is never sent over the network.
+
+When sending to a device for the first time, the app displays the fingerprint of the public key it received. Compare it directly with the fingerprint shown in the receiving device's Settings, using a trusted channel independent of the local network, then choose to trust the key. The app saves that fingerprint and checks it automatically on later connections. If the fingerprint changes, sending is blocked until you compare the new fingerprint with the device itself and explicitly trust the replacement key. Cancelling stops the send.
+
+Zeroconf discovery and the device ID announced on the network do not prove identity by themselves. An independent comparison is required on first contact and whenever a fingerprint-change warning appears. Update both devices to use persistent keys and IDs; older versions may not keep a stable identity across restarts. Encryption protects message and file contents after verification, while transfer metadata such as file names and sizes remains visible on the network.
 
 Both devices must run a compatible app version for encrypted transfers. The app rejects incoming messages and files that use the old unencrypted protocol.
 

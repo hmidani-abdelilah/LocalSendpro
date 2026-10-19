@@ -2,6 +2,7 @@
 
 import asyncio
 import base64
+import hashlib
 import os
 import socket
 import sqlite3
@@ -9,6 +10,7 @@ import subprocess
 import sys
 import threading
 import time
+import uuid
 from pathlib import Path
 
 import flet as ft
@@ -50,6 +52,12 @@ TRANSLATIONS = {
         "theme": "مظهر التطبيق", "system": "حسب النظام", "dark": "داكن", "light": "فاتح",
         "receive_folder": "مسار مجلد الاستلام", "folder_example": "مسار مجلد لحفظ الملفات المستلمة",
         "choose_folder": "اختيار مجلد الحفظ", "save": "حفظ", "cancel": "إلغاء",
+        "identity_fingerprint": "بصمة هوية هذا الجهاز (SHA-256)",
+        "verify_identity": "التحقق من هوية {device}",
+        "fingerprint_first": "هذا الجهاز غير موثّق بعد. قارن البصمة أدناه مع بصمة الجهاز الآخر الظاهرة في إعداداته قبل المتابعة.",
+        "fingerprint_changed": "تحذير: تغيّرت بصمة هذا الجهاز منذ آخر اتصال. لا تعتمد المفتاح الجديد إلا بعد مقارنته ببصمة الجهاز الآخر مباشرة.",
+        "verify_and_trust": "تحققت من البصمة، وثّق المفتاح",
+        "fingerprint_cancelled": "أُلغي التحقق من بصمة الجهاز؛ لم تُرسل البيانات.",
         "save_error": "تعذر حفظ الإعدادات: {error}", "invalid_port": "أدخل رقم منفذ صحيحًا بين 1 و65535.",
         "devices": "الأجهزة المكتشفة", "activity": "النشاط", "files": "إرسال / استقبال الملفات",
         "send_message": "إرسال رسالة", "choose_file": "اختيار ملف للإرسال", "open_folder": "فتح مجلد استقبال الملفات",
@@ -76,6 +84,12 @@ TRANSLATIONS = {
         "theme": "App theme", "system": "System", "dark": "Dark", "light": "Light",
         "receive_folder": "Receive folder", "folder_example": "Folder for received files",
         "choose_folder": "Choose save folder", "save": "Save", "cancel": "Cancel",
+        "identity_fingerprint": "This device identity fingerprint (SHA-256)",
+        "verify_identity": "Verify {device}",
+        "fingerprint_first": "This device is not trusted yet. Compare the fingerprint below with the fingerprint shown in the other device's settings before continuing.",
+        "fingerprint_changed": "Warning: this device's fingerprint changed since the last connection. Trust the new key only after comparing it directly with the other device.",
+        "verify_and_trust": "I verified the fingerprint; trust this key",
+        "fingerprint_cancelled": "Fingerprint verification was cancelled; no data was sent.",
         "save_error": "Could not save settings: {error}", "invalid_port": "Enter a valid port from 1 to 65535.",
         "devices": "Discovered devices", "activity": "Activity", "files": "Send / receive files",
         "send_message": "Send message", "choose_file": "Choose a file to send", "open_folder": "Open received files folder",
@@ -102,6 +116,12 @@ TRANSLATIONS = {
         "theme": "Thème de l’application", "system": "Système", "dark": "Sombre", "light": "Clair",
         "receive_folder": "Dossier de réception", "folder_example": "Dossier pour les fichiers reçus",
         "choose_folder": "Choisir le dossier d’enregistrement", "save": "Enregistrer", "cancel": "Annuler",
+        "identity_fingerprint": "Empreinte d’identité de cet appareil (SHA-256)",
+        "verify_identity": "Vérifier {device}",
+        "fingerprint_first": "Cet appareil n’est pas encore approuvé. Comparez l’empreinte ci-dessous avec celle affichée dans les paramètres de l’autre appareil avant de continuer.",
+        "fingerprint_changed": "Attention : l’empreinte de cet appareil a changé depuis la dernière connexion. N’approuvez la nouvelle clé qu’après l’avoir comparée directement avec l’autre appareil.",
+        "verify_and_trust": "Empreinte vérifiée, approuver cette clé",
+        "fingerprint_cancelled": "Vérification annulée ; aucune donnée n’a été envoyée.",
         "save_error": "Impossible d’enregistrer les paramètres : {error}", "invalid_port": "Entrez un port valide entre 1 et 65535.",
         "devices": "Appareils détectés", "activity": "Activité", "files": "Envoyer / recevoir des fichiers",
         "send_message": "Envoyer un message", "choose_file": "Choisir un fichier à envoyer", "open_folder": "Ouvrir le dossier des fichiers reçus",
@@ -160,6 +180,99 @@ def get_settings_db_path() -> Path:
     return Path.home() / ".localsendpro" / "settings.sqlite3"
 
 
+def load_or_create_device_private_key():
+    """Load a persistent device identity key without silently rotating it."""
+    key_path = get_settings_db_path().with_name("device_identity.pem")
+    key_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with key_path.open("rb") as key_file:
+            private_key = serialization.load_pem_private_key(
+                key_file.read(), password=None
+            )
+    except FileNotFoundError:
+        private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        key_bytes = private_key.private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.PKCS8,
+            serialization.NoEncryption(),
+        )
+        try:
+            key_fd = os.open(
+                key_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600
+            )
+        except FileExistsError:
+            with key_path.open("rb") as key_file:
+                private_key = serialization.load_pem_private_key(
+                    key_file.read(), password=None
+                )
+        else:
+            with os.fdopen(key_fd, "wb") as key_file:
+                key_file.write(key_bytes)
+                key_file.flush()
+                os.fsync(key_file.fileno())
+
+    if not isinstance(private_key, rsa.RSAPrivateKey) or private_key.key_size < 2048:
+        raise ValueError("The saved device identity key is invalid")
+    return private_key
+
+
+def public_key_fingerprint(public_key) -> str:
+    """Return a SHA-256 fingerprint of the canonical SubjectPublicKeyInfo."""
+    public_bytes = public_key.public_bytes(
+        serialization.Encoding.DER,
+        serialization.PublicFormat.SubjectPublicKeyInfo,
+    )
+    return hashlib.sha256(public_bytes).hexdigest().upper()
+
+
+def format_fingerprint(fingerprint: str) -> str:
+    return ":".join(fingerprint[index : index + 2] for index in range(0, len(fingerprint), 2))
+
+
+def get_trusted_peer_fingerprint(peer_id: str):
+    """Read a peer's previously confirmed public-key fingerprint, if any."""
+    database_path = get_settings_db_path()
+    database_path.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(database_path, timeout=10) as connection:
+        connection.execute(
+            """CREATE TABLE IF NOT EXISTS trusted_devices (
+                peer_id TEXT PRIMARY KEY,
+                device_name TEXT NOT NULL,
+                fingerprint TEXT NOT NULL,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )"""
+        )
+        row = connection.execute(
+            "SELECT fingerprint FROM trusted_devices WHERE peer_id = ?",
+            (peer_id,),
+        ).fetchone()
+    return row[0] if row else None
+
+
+def save_trusted_peer_fingerprint(peer_id: str, device_name: str, fingerprint: str):
+    """Pin a fingerprint only after the user confirms an out-of-band comparison."""
+    database_path = get_settings_db_path()
+    database_path.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(database_path, timeout=10) as connection:
+        connection.execute(
+            """CREATE TABLE IF NOT EXISTS trusted_devices (
+                peer_id TEXT PRIMARY KEY,
+                device_name TEXT NOT NULL,
+                fingerprint TEXT NOT NULL,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )"""
+        )
+        connection.execute(
+            """INSERT INTO trusted_devices (peer_id, device_name, fingerprint)
+               VALUES (?, ?, ?)
+               ON CONFLICT(peer_id) DO UPDATE SET
+                   device_name=excluded.device_name,
+                   fingerprint=excluded.fingerprint,
+                   updated_at=CURRENT_TIMESTAMP""",
+            (peer_id, device_name, fingerprint),
+        )
+
+
 def load_app_settings(defaults: dict) -> dict:
     """Create the settings table on first launch and return saved values."""
     database_path = get_settings_db_path()
@@ -173,7 +286,8 @@ def load_app_settings(defaults: dict) -> dict:
                 theme TEXT NOT NULL,
                 receive_dir_mode TEXT NOT NULL,
                 receive_dir TEXT NOT NULL,
-                language TEXT NOT NULL DEFAULT 'ar'
+                language TEXT NOT NULL DEFAULT 'ar',
+                device_id TEXT NOT NULL DEFAULT ''
             )"""
         )
         columns = {
@@ -183,21 +297,34 @@ def load_app_settings(defaults: dict) -> dict:
             connection.execute(
                 "ALTER TABLE app_settings ADD COLUMN language TEXT NOT NULL DEFAULT 'ar'"
             )
+        if "device_id" not in columns:
+            connection.execute(
+                "ALTER TABLE app_settings ADD COLUMN device_id TEXT NOT NULL DEFAULT ''"
+            )
         connection.execute(
             """INSERT OR IGNORE INTO app_settings
-               (id, device_name, port, theme, receive_dir_mode, receive_dir, language)
-               VALUES (1, ?, ?, ?, ?, ?, ?)""",
+               (id, device_name, port, theme, receive_dir_mode, receive_dir, language, device_id)
+               VALUES (1, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 defaults["device_name"], defaults["port"], defaults["theme"],
-                defaults["receive_dir_mode"], defaults["receive_dir"], defaults["language"],
+                defaults["receive_dir_mode"], defaults["receive_dir"],
+                defaults["language"], defaults["device_id"],
             ),
         )
         row = connection.execute(
-            """SELECT device_name, port, theme, receive_dir_mode, receive_dir, language
+            "SELECT device_id FROM app_settings WHERE id = 1"
+        ).fetchone()
+        if not row[0]:
+            connection.execute(
+                "UPDATE app_settings SET device_id = ? WHERE id = 1",
+                (uuid.uuid4().hex,),
+            )
+        row = connection.execute(
+            """SELECT device_name, port, theme, receive_dir_mode, receive_dir, language, device_id
                FROM app_settings WHERE id = 1"""
         ).fetchone()
     values = dict(zip(
-        ("device_name", "port", "theme", "receive_dir_mode", "receive_dir", "language"), row
+        ("device_name", "port", "theme", "receive_dir_mode", "receive_dir", "language", "device_id"), row
     ))
     if not 1 <= int(values["port"]) <= 65535:
         values["port"] = defaults["port"]
@@ -231,23 +358,26 @@ def save_app_settings(settings: dict) -> None:
                 theme TEXT NOT NULL,
                 receive_dir_mode TEXT NOT NULL,
                 receive_dir TEXT NOT NULL,
-                language TEXT NOT NULL DEFAULT 'ar'
+                language TEXT NOT NULL DEFAULT 'ar',
+                device_id TEXT NOT NULL DEFAULT ''
             )"""
         )
         connection.execute(
             """INSERT INTO app_settings
-               (id, device_name, port, theme, receive_dir_mode, receive_dir, language)
-               VALUES (1, ?, ?, ?, ?, ?, ?)
+               (id, device_name, port, theme, receive_dir_mode, receive_dir, language, device_id)
+               VALUES (1, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(id) DO UPDATE SET
                    device_name=excluded.device_name,
                    port=excluded.port,
                    theme=excluded.theme,
                    receive_dir_mode=excluded.receive_dir_mode,
                    receive_dir=excluded.receive_dir,
-                   language=excluded.language""",
+                   language=excluded.language,
+                   device_id=excluded.device_id""",
             (
                 settings["device_name"], settings["port"], settings["theme"],
-                settings["receive_dir_mode"], settings["receive_dir"], settings["language"],
+                settings["receive_dir_mode"], settings["receive_dir"],
+                settings["language"], settings["device_id"],
             ),
         )
 
@@ -562,6 +692,7 @@ def main(page: ft.Page):
         "language": "ar",
         "receive_dir_mode": "downloads",
         "receive_dir": str(get_received_files_dir()),
+        "device_id": uuid.uuid4().hex,
     }
     try:
         app_config.update(load_app_settings(app_config))
@@ -573,10 +704,11 @@ def main(page: ft.Page):
         return TRANSLATIONS.get(language, TRANSLATIONS["ar"]).get(key, TRANSLATIONS["ar"].get(key, key)).format(**values)
 
     page.rtl = app_config["language"] == "ar"
-    device_private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    device_private_key = load_or_create_device_private_key()
     discovered_devices = {}
     devices_lock = threading.RLock()
     receiver_lock = asyncio.Lock()
+    identity_lock = asyncio.Lock()
     session = {"active": True}
     network = {"zeroconf": None, "service": None, "browser": None, "server": None}
     android_network_locks = []
@@ -1058,6 +1190,103 @@ def main(page: ft.Page):
                 if old_zeroconf is not None:
                     await old_zeroconf.async_close()
 
+    async def verify_peer_public_key(target, public_key):
+        """Require a confirmed SHA-256 fingerprint before using a peer key."""
+        if not isinstance(public_key, rsa.RSAPublicKey) or public_key.key_size < 2048:
+            raise ValueError("The receiving device sent an invalid RSA identity key")
+
+        peer_id = str(target.get("identity_id") or target["id"])
+        if not peer_id or len(peer_id) > 512:
+            raise ValueError("Invalid peer identity")
+        fingerprint = public_key_fingerprint(public_key)
+        async with identity_lock:
+            trusted_fingerprint = get_trusted_peer_fingerprint(peer_id)
+            if trusted_fingerprint == fingerprint:
+                return True
+
+            decision = asyncio.get_running_loop().create_future()
+
+            def answer(accepted):
+                if not decision.done():
+                    decision.set_result(accepted)
+                    page.pop_dialog()
+
+            def dismiss(_=None):
+                if not decision.done():
+                    decision.set_result(False)
+
+            warning_key = (
+                "fingerprint_changed"
+                if trusted_fingerprint is not None
+                else "fingerprint_first"
+            )
+            fingerprint_field = ft.TextField(
+                value=format_fingerprint(fingerprint),
+                read_only=True,
+                multiline=True,
+                min_lines=2,
+                max_lines=3,
+                rtl=False,
+            )
+            page.show_dialog(
+                ft.AlertDialog(
+                    modal=True,
+                    title=ft.Text(tr("verify_identity", device=target["name"])),
+                    content=ft.Column(
+                        [ft.Text(tr(warning_key)), fingerprint_field],
+                        tight=True,
+                        width=320,
+                    ),
+                    on_dismiss=dismiss,
+                    actions=[
+                        ft.Button(
+                            tr("verify_and_trust"),
+                            on_click=lambda _: answer(True),
+                        ),
+                        ft.OutlinedButton(
+                            tr("cancel"), on_click=lambda _: answer(False)
+                        ),
+                    ],
+                )
+            )
+            accepted = await decision
+            if not accepted:
+                return False
+            save_trusted_peer_fingerprint(
+                peer_id, target["name"], fingerprint
+            )
+            return True
+
+    async def get_verified_peer_public_key(target):
+        """Fetch a peer key and authenticate it before returning it to callers."""
+        writer = None
+        try:
+            reader, writer = await asyncio.wait_for(
+                asyncio.open_connection(target["ip"], target["port"]), timeout=15
+            )
+            writer.write(b"KEY?")
+            await writer.drain()
+            public_size = int.from_bytes(
+                await asyncio.wait_for(reader.readexactly(4), timeout=10), "big"
+            )
+            if not 1 <= public_size <= 8192:
+                raise ValueError("Invalid receiver public key")
+            public_key_bytes = await asyncio.wait_for(
+                reader.readexactly(public_size), timeout=10
+            )
+        finally:
+            if writer is not None:
+                writer.close()
+                try:
+                    await writer.wait_closed()
+                except OSError:
+                    pass
+
+        public_key = serialization.load_pem_public_key(public_key_bytes)
+        if not await verify_peer_public_key(target, public_key):
+            raise PermissionError(tr("fingerprint_cancelled"))
+        return public_key
+
     async def restart_network():
         """Restart the TCP listener and Zeroconf announcement with current settings."""
         await stop_network()
@@ -1081,7 +1310,10 @@ def main(page: ft.Page):
                 name=f"{HOSTNAME}.{SERVICE_TYPE}",
                 addresses=[socket.inet_aton(local_ip)],
                 port=app_config["port"],
-                properties={"device_name": app_config["device_name"]},
+                properties={
+                    "device_name": app_config["device_name"],
+                    "device_id": app_config["device_id"],
+                },
                 server=f"{HOSTNAME}.local.",
             )
 
@@ -1111,9 +1343,13 @@ def main(page: ft.Page):
                     device_name = info.properties.get(
                         b"device_name", b"Unknown"
                     ).decode("utf-8", errors="replace")
+                    peer_identity_id = info.properties.get(
+                        b"device_id", service_name.encode("utf-8")
+                    ).decode("utf-8", errors="replace")
                     with devices_lock:
                         discovered_devices[service_name] = {
                             "id": service_name,
+                            "identity_id": peer_identity_id,
                             "name": device_name,
                             "ip": addresses[0],
                             "port": info.port,
@@ -1271,20 +1507,7 @@ def main(page: ft.Page):
         payload = message.encode("utf-8")
         writer = None
         try:
-            reader, writer = await asyncio.wait_for(
-                asyncio.open_connection(target["ip"], target["port"]), timeout=15
-            )
-            writer.write(b"KEY?")
-            await writer.drain()
-            public_size = int.from_bytes(await asyncio.wait_for(reader.readexactly(4), timeout=10), "big")
-            if not 1 <= public_size <= 8192:
-                raise ValueError("Invalid receiver public key")
-            receiver_public_key = serialization.load_pem_public_key(
-                await asyncio.wait_for(reader.readexactly(public_size), timeout=10)
-            )
-            writer.close()
-            await writer.wait_closed()
-            writer = None
+            receiver_public_key = await get_verified_peer_public_key(target)
 
             aes_key = os.urandom(32)
             nonce_prefix = os.urandom(4)
@@ -1359,21 +1582,7 @@ def main(page: ft.Page):
             if not filename:
                 filename = "file"
 
-            reader, writer = await asyncio.wait_for(
-                asyncio.open_connection(target["ip"], target["port"]), timeout=15
-            )
-            writer.write(b"KEY?")
-            await writer.drain()
-            public_size = int.from_bytes(await asyncio.wait_for(reader.readexactly(4), timeout=10), "big")
-            if not 1 <= public_size <= 8192:
-                raise ValueError("Invalid receiver public key")
-            receiver_public_key = serialization.load_pem_public_key(
-                await asyncio.wait_for(reader.readexactly(public_size), timeout=10)
-            )
-            # The receiver closes the KEY? connection after returning its key.
-            # Reconnect before requesting file approval and transferring bytes.
-            writer.close()
-            await writer.wait_closed()
+            receiver_public_key = await get_verified_peer_public_key(target)
             reader, writer = await asyncio.wait_for(
                 asyncio.open_connection(target["ip"], target["port"]), timeout=15
             )
@@ -1527,6 +1736,17 @@ def main(page: ft.Page):
         name_input = ft.TextField(
             label=tr("device_name"), value=app_config["device_name"]
         )
+        identity_fingerprint_input = ft.TextField(
+            label=tr("identity_fingerprint"),
+            value=format_fingerprint(
+                public_key_fingerprint(device_private_key.public_key())
+            ),
+            read_only=True,
+            multiline=True,
+            min_lines=2,
+            max_lines=3,
+            rtl=False,
+        )
         port_input = ft.TextField(
             label=tr("port"), value=str(app_config["port"])
         )
@@ -1621,6 +1841,7 @@ def main(page: ft.Page):
                 content=ft.Column(
                     [
                         name_input,
+                        identity_fingerprint_input,
                         port_input,
                         language_dropdown,
                         theme_dropdown,
@@ -1643,7 +1864,7 @@ def main(page: ft.Page):
                             vertical_alignment=ft.CrossAxisAlignment.CENTER,
                         ),
                     ],
-                    height=370,
+                    height=445,
                     tight=True,
                 ),
                 actions=[
