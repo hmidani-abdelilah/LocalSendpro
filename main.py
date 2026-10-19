@@ -539,10 +539,16 @@ def main(page: ft.Page):
         height=300,
         fit=ft.BoxFit.CONTAIN)
     
-    page.add(ft.Column([splash_image], alignment=ft.MainAxisAlignment.CENTER, expand=True))
+    page.add(
+        ft.Container(
+            content=splash_image,
+            alignment=ft.Alignment.CENTER,
+            expand=True,
+        )
+    )
     page.update()
     
-    # محاكاة وقت التحميل (استبدله بالتحميل الحقيقي لبياناتك)
+    # محاكاة وقت التحميل 
     time.sleep(2)
     
     # 2. مسح الشاشة وعرض واجهة التطبيق الرئيسية
