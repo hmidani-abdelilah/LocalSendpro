@@ -4,7 +4,7 @@ desktop_flavor = "full"
 
 [project]
 name = "localsend-pro"
-version = "3.0.2"
+version = "3.0.3"
 requires-python = ">=3.12"
 dependencies = ["flet", "flet-audio", "zeroconf", "cryptography"]
 
