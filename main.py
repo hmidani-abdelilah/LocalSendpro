@@ -3,6 +3,7 @@
 import asyncio
 import base64
 import hashlib
+import ipaddress
 import os
 import socket
 import sqlite3
@@ -72,6 +73,7 @@ TRANSLATIONS = {
         "receive_rejected": "تم رفض استقبال {name} من {device}.", "send_rejected": "رفض {device} استقبال {name}.",
         "folder_set": "تم تعيين مجلد الاستلام: {path}", "partial_send": "لم يتم إرسال الملف كاملًا.",
         "connection_not_accepted": "لم يؤكد الجهاز استلام الرسالة.",
+        "waiting_for_network": "بانتظار اتصال بالشبكة المحلية؛ سيعيد التطبيق المحاولة تلقائيًا.",
     },
     "en": {
         "language": "Language", "arabic": "Arabic", "english": "English", "french": "French",
@@ -104,6 +106,7 @@ TRANSLATIONS = {
         "receive_rejected": "Reception of {name} from {device} was rejected.", "send_rejected": "{device} rejected {name}.",
         "folder_set": "Receive folder set to: {path}", "partial_send": "The file was not sent completely.",
         "connection_not_accepted": "The device did not confirm receipt of the message.",
+        "waiting_for_network": "Waiting for a local network connection. The app will retry automatically.",
     },
     "fr": {
         "language": "Langue", "arabic": "Arabe", "english": "Anglais", "french": "Français",
@@ -136,6 +139,7 @@ TRANSLATIONS = {
         "receive_rejected": "La réception de {name} depuis {device} a été refusée.", "send_rejected": "{device} a refusé {name}.",
         "folder_set": "Dossier de réception défini : {path}", "partial_send": "Le fichier n’a pas été envoyé intégralement.",
         "connection_not_accepted": "L’appareil n’a pas confirmé la réception du message.",
+        "waiting_for_network": "En attente d’une connexion au réseau local. L’application réessaiera automatiquement.",
     },
 }
 
@@ -436,15 +440,98 @@ def get_android_context():
 
 
 def get_local_ip():
-    """Return the IPv4 address used by the active local network interface."""
+    """Return a usable local IPv4 address, preferring Android Wi-Fi."""
+    if ANDROID_RUNTIME:
+        try:
+            context, autoclass = get_android_context()
+            connectivity_manager = context.getSystemService("connectivity")
+            network_capabilities = autoclass("android.net.NetworkCapabilities")
+            local_transports = (
+                network_capabilities.TRANSPORT_WIFI,
+                network_capabilities.TRANSPORT_ETHERNET,
+            )
+            for network_handle in connectivity_manager.getAllNetworks():
+                capabilities = connectivity_manager.getNetworkCapabilities(
+                    network_handle
+                )
+                if capabilities is None or not any(
+                    capabilities.hasTransport(transport)
+                    for transport in local_transports
+                ):
+                    continue
+                link_properties = connectivity_manager.getLinkProperties(
+                    network_handle
+                )
+                if link_properties is None:
+                    continue
+                for link_address in link_properties.getLinkAddresses():
+                    address = link_address.getAddress().getHostAddress()
+                    address = str(address).split("%", 1)[0]
+                    if is_usable_local_ipv4(address):
+                        return address
+        except Exception:
+            pass
+
+        try:
+            context, _ = get_android_context()
+            wifi_manager = context.getSystemService("wifi")
+            if wifi_manager is not None and wifi_manager.isWifiEnabled():
+                ip_value = wifi_manager.getConnectionInfo().getIpAddress()
+                if ip_value:
+                    wifi_ip = socket.inet_ntoa(
+                        (int(ip_value) & 0xFFFFFFFF).to_bytes(4, "little")
+                    )
+                    if is_usable_local_ipv4(wifi_ip):
+                        return wifi_ip
+        except Exception:
+            pass
+
+        if ANDROID_RUNTIME:
+            return None
+
     connection = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         connection.connect(("10.255.255.255", 1))
-        return connection.getsockname()[0]
+        route_ip = connection.getsockname()[0]
+        if is_usable_local_ipv4(route_ip):
+            return route_ip
     except OSError:
-        return "127.0.0.1"
+        pass
     finally:
         connection.close()
+
+    if psutil is not None:
+        interface_addresses = []
+        wifi_addresses = []
+        try:
+            for interface_name, addresses in psutil.net_if_addrs().items():
+                for address in addresses:
+                    if address.family != socket.AF_INET or not is_usable_local_ipv4(
+                        address.address
+                    ):
+                        continue
+                    interface_addresses.append(address.address)
+                    if interface_name.lower().startswith(("wifi", "wlan", "wl")):
+                        wifi_addresses.append(address.address)
+        except Exception:
+            pass
+        if wifi_addresses:
+            return wifi_addresses[0]
+        if interface_addresses:
+            return interface_addresses[0]
+    return None
+
+
+def is_usable_local_ipv4(address: str) -> bool:
+    try:
+        parsed = ipaddress.IPv4Address(address)
+    except ipaddress.AddressValueError:
+        return False
+    return not (
+        parsed.is_loopback
+        or parsed.is_unspecified
+        or parsed.is_multicast
+    )
 
 
 def format_speed(bytes_per_second):
@@ -709,8 +796,16 @@ def main(page: ft.Page):
     devices_lock = threading.RLock()
     receiver_lock = asyncio.Lock()
     identity_lock = asyncio.Lock()
+    network_restart_lock = asyncio.Lock()
     session = {"active": True}
-    network = {"zeroconf": None, "service": None, "browser": None, "server": None}
+    network = {
+        "zeroconf": None,
+        "service": None,
+        "browser": None,
+        "server": None,
+        "local_ip": None,
+        "listener": None,
+    }
     android_network_locks = []
 
     async def handle_mouse_scroll(e: ft.ScrollEvent):
@@ -1176,7 +1271,15 @@ def main(page: ft.Page):
         old_server = network["server"]
         old_browser = network["browser"]
         old_zeroconf = network["zeroconf"]
-        network.update(server=None, browser=None, zeroconf=None, service=None)
+        old_listener = network["listener"]
+        network.update(
+            server=None,
+            browser=None,
+            zeroconf=None,
+            service=None,
+            local_ip=None,
+            listener=None,
+        )
 
         try:
             if old_server is not None:
@@ -1187,8 +1290,21 @@ def main(page: ft.Page):
                 if old_browser is not None:
                     await old_browser.async_cancel()
             finally:
-                if old_zeroconf is not None:
-                    await old_zeroconf.async_close()
+                pending_tasks = (
+                    list(old_listener.pending_resolutions.values())
+                    if old_listener is not None
+                    else []
+                )
+                for pending in pending_tasks:
+                    pending.cancel()
+                try:
+                    if pending_tasks:
+                        await asyncio.gather(
+                            *pending_tasks, return_exceptions=True
+                        )
+                finally:
+                    if old_zeroconf is not None:
+                        await old_zeroconf.async_close()
 
     async def verify_peer_public_key(target, public_key):
         """Require a confirmed SHA-256 fingerprint before using a peer key."""
@@ -1257,13 +1373,29 @@ def main(page: ft.Page):
             )
             return True
 
+    async def open_peer_connection(target, timeout=10, refresh=True):
+        """Refresh a discovered address and retry brief local-network failures."""
+        for attempt in range(3):
+            if refresh:
+                with devices_lock:
+                    current_target = discovered_devices.get(target["id"])
+                    if current_target is not None:
+                        target.update(current_target)
+            try:
+                return await asyncio.wait_for(
+                    asyncio.open_connection(target["ip"], target["port"]),
+                    timeout=timeout,
+                )
+            except (OSError, asyncio.TimeoutError):
+                if attempt == 2:
+                    raise
+                await asyncio.sleep(0.4 * (attempt + 1))
+
     async def get_verified_peer_public_key(target):
         """Fetch a peer key and authenticate it before returning it to callers."""
         writer = None
         try:
-            reader, writer = await asyncio.wait_for(
-                asyncio.open_connection(target["ip"], target["port"]), timeout=15
-            )
+            reader, writer = await open_peer_connection(target)
             writer.write(b"KEY?")
             await writer.drain()
             public_size = int.from_bytes(
@@ -1288,6 +1420,11 @@ def main(page: ft.Page):
         return public_key
 
     async def restart_network():
+        """Serialize network restarts requested by settings or interface changes."""
+        async with network_restart_lock:
+            await restart_network_locked()
+
+    async def restart_network_locked():
         """Restart the TCP listener and Zeroconf announcement with current settings."""
         await stop_network()
 
@@ -1299,11 +1436,17 @@ def main(page: ft.Page):
         zeroconf = None
         service_info = None
         browser = None
+        listener = None
         try:
+            local_ip = get_local_ip()
+            if local_ip is None:
+                network_status_text.value = tr("waiting_for_network")
+                page.update()
+                return
+
             server = await asyncio.start_server(
                 handle_incoming_file, host="0.0.0.0", port=app_config["port"]
             )
-            local_ip = get_local_ip()
             zeroconf = AsyncZeroconf()
             service_info = ServiceInfo(
                 type_=SERVICE_TYPE,
@@ -1320,43 +1463,73 @@ def main(page: ft.Page):
             class DeviceListener:
                 """Keep the shared device list synchronized with mDNS events."""
 
+                def __init__(self):
+                    self.pending_resolutions = {}
+
                 def add_service(self, zc, service_type, service_name):
-                    asyncio.create_task(
-                        self.resolve_service(zc, service_type, service_name)
-                    )
+                    task = self.pending_resolutions.get(service_name)
+                    if task is None or task.done():
+                        self.pending_resolutions[service_name] = asyncio.create_task(
+                            self.resolve_service(zc, service_type, service_name)
+                        )
 
                 async def resolve_service(self, zc, service_type, service_name):
-                    info = AsyncServiceInfo(service_type, service_name)
                     try:
-                        resolved = await info.async_request(zc, timeout=3000)
-                    except (OSError, asyncio.TimeoutError):
-                        return
-                    if not resolved:
-                        return
-                    addresses = [
-                        socket.inet_ntoa(address)
-                        for address in info.addresses
-                        if len(address) == 4
-                    ]
-                    if not addresses or local_ip in addresses:
-                        return
-                    device_name = info.properties.get(
-                        b"device_name", b"Unknown"
-                    ).decode("utf-8", errors="replace")
-                    peer_identity_id = info.properties.get(
-                        b"device_id", service_name.encode("utf-8")
-                    ).decode("utf-8", errors="replace")
-                    with devices_lock:
-                        discovered_devices[service_name] = {
-                            "id": service_name,
-                            "identity_id": peer_identity_id,
-                            "name": device_name,
-                            "ip": addresses[0],
-                            "port": info.port,
-                        }
-                    schedule_device_refresh()
+                        for attempt in range(3):
+                            info = AsyncServiceInfo(service_type, service_name)
+                            try:
+                                resolved = await info.async_request(
+                                    zc, timeout=2500
+                                )
+                            except asyncio.CancelledError:
+                                raise
+                            except Exception as error:
+                                print(
+                                    f"Could not resolve {service_name} "
+                                    f"(attempt {attempt + 1}/3): {error}"
+                                )
+                                resolved = False
+
+                            if resolved:
+                                addresses = [
+                                    socket.inet_ntoa(address)
+                                    for address in info.addresses
+                                    if len(address) == 4
+                                    and is_usable_local_ipv4(
+                                        socket.inet_ntoa(address)
+                                    )
+                                ]
+                                if addresses and local_ip not in addresses and info.port:
+                                    device_name = info.properties.get(
+                                        b"device_name", b"Unknown"
+                                    ).decode("utf-8", errors="replace")
+                                    peer_identity_id = info.properties.get(
+                                        b"device_id",
+                                        service_name.encode("utf-8"),
+                                    ).decode("utf-8", errors="replace")
+                                    with devices_lock:
+                                        discovered_devices[service_name] = {
+                                            "id": service_name,
+                                            "identity_id": peer_identity_id,
+                                            "name": device_name,
+                                            "ip": addresses[0],
+                                            "port": info.port,
+                                        }
+                                    schedule_device_refresh()
+                                    return
+
+                            if attempt < 2:
+                                await asyncio.sleep(0.4 * (attempt + 1))
+                    finally:
+                        if self.pending_resolutions.get(
+                            service_name
+                        ) is asyncio.current_task():
+                            self.pending_resolutions.pop(service_name, None)
 
                 def remove_service(self, zc, service_type, service_name):
+                    pending = self.pending_resolutions.pop(service_name, None)
+                    if pending is not None:
+                        pending.cancel()
                     with devices_lock:
                         discovered_devices.pop(service_name, None)
                     schedule_device_refresh()
@@ -1365,20 +1538,29 @@ def main(page: ft.Page):
                     self.add_service(zc, service_type, service_name)
 
             await zeroconf.async_register_service(service_info)
+            listener = DeviceListener()
             browser = AsyncServiceBrowser(
-                zeroconf.zeroconf, SERVICE_TYPE, DeviceListener()
+                zeroconf.zeroconf,
+                SERVICE_TYPE,
+                listener,
+                delay=2000,
             )
             network.update(
                 server=server,
                 zeroconf=zeroconf,
                 service=service_info,
                 browser=browser,
+                local_ip=local_ip,
+                listener=listener,
             )
             network_status_text.value = (
                 tr("network_connected", ip=local_ip, port=app_config["port"])
             )
             add_activity(tr("network_ready"), color="green")
         except Exception as error:
+            if listener is not None:
+                for pending in list(listener.pending_resolutions.values()):
+                    pending.cancel()
             if browser is not None:
                 await browser.async_cancel()
             if zeroconf is not None:
@@ -1389,6 +1571,22 @@ def main(page: ft.Page):
             network_status_text.value = tr("network_error", error=error)
             add_activity(tr("network_error", error=error), color="red")
         page.update()
+
+    async def monitor_local_network():
+        """Restart discovery when Wi-Fi appears, disappears, or changes address."""
+        last_restart = 0.0
+        while session["active"]:
+            await asyncio.sleep(3)
+            if not session["active"]:
+                break
+            current_ip = get_local_ip()
+            active_ip = network.get("local_ip")
+            now = time.monotonic()
+            if current_ip != active_ip and now - last_restart >= 5:
+                last_restart = now
+                async with network_restart_lock:
+                    if get_local_ip() != network.get("local_ip"):
+                        await restart_network_locked()
 
     async def monitor_live_speed():
         """Update the displayed upload and download rate from psutil counters."""
@@ -1514,9 +1712,7 @@ def main(page: ft.Page):
             wrapped_key = encrypt_message(
                 receiver_public_key, base64.urlsafe_b64encode(aes_key).decode("ascii")
             )
-            reader, writer = await asyncio.wait_for(
-                asyncio.open_connection(target["ip"], target["port"]), timeout=15
-            )
+            reader, writer = await open_peer_connection(target, refresh=False)
             writer.write(
                 f"MSGC:{len(payload)}:{len(wrapped_key)}\n".encode("ascii")
                 + wrapped_key + nonce_prefix
@@ -1583,9 +1779,7 @@ def main(page: ft.Page):
                 filename = "file"
 
             receiver_public_key = await get_verified_peer_public_key(target)
-            reader, writer = await asyncio.wait_for(
-                asyncio.open_connection(target["ip"], target["port"]), timeout=15
-            )
+            reader, writer = await open_peer_connection(target, refresh=False)
             aes_key = os.urandom(32)
             # Keep the established FILEE header so already-installed receivers
             # continue to show the incoming-file approval dialog.
@@ -1964,6 +2158,7 @@ def main(page: ft.Page):
     page.on_app_lifecycle_state_change = handle_app_lifecycle_state_change
     keep_android_network_active()
     page.run_task(restart_network)
+    page.run_task(monitor_local_network)
     page.run_task(monitor_live_speed)
 
 
