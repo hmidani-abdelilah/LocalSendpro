@@ -5,14 +5,18 @@ import base64
 import hashlib
 import ipaddress
 import os
+import shutil
 import socket
 import sqlite3
+import stat
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import uuid
-from pathlib import Path
+import zipfile
+from pathlib import Path, PurePosixPath
 
 import flet as ft
 import flet_audio as fta
@@ -61,7 +65,12 @@ TRANSLATIONS = {
         "fingerprint_cancelled": "أُلغي التحقق من بصمة الجهاز؛ لم تُرسل البيانات.",
         "save_error": "تعذر حفظ الإعدادات: {error}", "invalid_port": "أدخل رقم منفذ صحيحًا بين 1 و65535.",
         "devices": "الأجهزة المكتشفة", "activity": "النشاط", "files": "إرسال / استقبال الملفات",
-        "send_message": "إرسال رسالة", "choose_file": "اختيار ملف للإرسال", "open_folder": "فتح مجلد استقبال الملفات",
+        "send_message": "إرسال رسالة", "choose_file": "اختيار ملف للإرسال", "choose_folder_to_send": "اختيار مجلد للإرسال",
+        "folder_send_web_unsupported": "اختيار المجلد متاح في تطبيق سطح المكتب أو الهاتف فقط",
+        "open_folder": "فتح مجلد استقبال الملفات", "request_folder": "طلب استقبال مجلد",
+        "folder": "المجلد: {value}", "preparing_folder": "جارٍ تجهيز المجلد {name} للإرسال...",
+        "extracting_folder": "جارٍ فك المجلد {name}...",
+        "folder_receive_failed": "لم يؤكد الجهاز المستقبِل فك المجلد وحفظه.",
         "select_receiver": "اختر جهاز الاستقبال", "send": "إرسال", "search_empty": "لم يتم اكتشاف أي جهاز لإرسال الملف إليه.",
         "no_message_device": "اختر جهازًا متصلًا لإرسال الرسالة.", "network_connected": "متصل على {ip}:{port}",
         "network_ready": "بدأ اكتشاف الأجهزة واستقبال الملفات.", "receive_ok": "تم استلام {name} وحفظه في {path}.",
@@ -94,7 +103,12 @@ TRANSLATIONS = {
         "fingerprint_cancelled": "Fingerprint verification was cancelled; no data was sent.",
         "save_error": "Could not save settings: {error}", "invalid_port": "Enter a valid port from 1 to 65535.",
         "devices": "Discovered devices", "activity": "Activity", "files": "Send / receive files",
-        "send_message": "Send message", "choose_file": "Choose a file to send", "open_folder": "Open received files folder",
+        "send_message": "Send message", "choose_file": "Choose a file to send", "choose_folder_to_send": "Choose a folder to send",
+        "folder_send_web_unsupported": "Folder selection is available in the desktop or mobile app only",
+        "open_folder": "Open received files folder", "request_folder": "Incoming folder request",
+        "folder": "Folder: {value}", "preparing_folder": "Preparing folder {name} for sending...",
+        "extracting_folder": "Extracting folder {name}...",
+        "folder_receive_failed": "The receiving device did not confirm that the folder was extracted and saved.",
         "select_receiver": "Choose a receiving device", "send": "Send", "search_empty": "No devices found to send the file to.",
         "no_message_device": "Select a connected device to send a message.", "network_connected": "Connected at {ip}:{port}",
         "network_ready": "Device discovery and file reception started.", "receive_ok": "Received {name} and saved to {path}.",
@@ -127,7 +141,12 @@ TRANSLATIONS = {
         "fingerprint_cancelled": "Vérification annulée ; aucune donnée n’a été envoyée.",
         "save_error": "Impossible d’enregistrer les paramètres : {error}", "invalid_port": "Entrez un port valide entre 1 et 65535.",
         "devices": "Appareils détectés", "activity": "Activité", "files": "Envoyer / recevoir des fichiers",
-        "send_message": "Envoyer un message", "choose_file": "Choisir un fichier à envoyer", "open_folder": "Ouvrir le dossier des fichiers reçus",
+        "send_message": "Envoyer un message", "choose_file": "Choisir un fichier à envoyer", "choose_folder_to_send": "Choisir un dossier à envoyer",
+        "folder_send_web_unsupported": "La sélection de dossiers est disponible uniquement dans l’application mobile ou ordinateur",
+        "open_folder": "Ouvrir le dossier des fichiers reçus", "request_folder": "Demande de réception de dossier",
+        "folder": "Dossier : {value}", "preparing_folder": "Préparation du dossier {name}...",
+        "extracting_folder": "Extraction du dossier {name}...",
+        "folder_receive_failed": "L’appareil destinataire n’a pas confirmé l’extraction et l’enregistrement du dossier.",
         "select_receiver": "Choisir un appareil destinataire", "send": "Envoyer", "search_empty": "Aucun appareil détecté pour l’envoi.",
         "no_message_device": "Choisissez un appareil connecté pour envoyer un message.", "network_connected": "Connecté sur {ip}:{port}",
         "network_ready": "Recherche des appareils et réception de fichiers démarrées.", "receive_ok": "{name} reçu et enregistré dans {path}.",
@@ -670,6 +689,149 @@ def get_receive_dir(config=None) -> Path:
     return safe_receive_dir(Path.cwd() / "received_files")
 
 
+def _validate_transfer_path_component(component: str) -> str:
+    """Reject archive names that can escape a folder or fail on common platforms."""
+    if (
+        not component
+        or component in {".", ".."}
+        or component.endswith((".", " "))
+        or any(ord(character) < 32 or character in '<>:"|?*\\/' for character in component)
+    ):
+        raise ValueError(f"Unsupported folder or file name in archive: {component!r}")
+    reserved_name = component.split(".", 1)[0].upper()
+    if reserved_name in {"CON", "PRN", "AUX", "NUL"} or (
+        len(reserved_name) == 4
+        and reserved_name[:3] in {"COM", "LPT"}
+        and reserved_name[3] in "123456789"
+    ):
+        raise ValueError(f"Unsupported reserved name in archive: {component!r}")
+    return component
+
+
+def create_folder_archive(source_dir: Path, archive_path: Path, root_name: str) -> None:
+    """Create a ZIP archive containing a folder tree, without following links."""
+    source_dir = Path(source_dir).expanduser()
+    if source_dir.is_symlink():
+        raise ValueError("Symbolic links are not included.")
+    source_dir = source_dir.resolve(strict=True)
+    archive_path = Path(archive_path).resolve()
+    if not source_dir.is_dir() or source_dir == Path(source_dir.anchor):
+        raise ValueError("Choose a folder other than a filesystem root.")
+    _validate_transfer_path_component(root_name)
+
+    def raise_walk_error(error):
+        raise error
+
+    with zipfile.ZipFile(
+        archive_path, mode="w", compression=zipfile.ZIP_STORED, allowZip64=True
+    ) as archive:
+        archive.writestr(f"{root_name}/", "")
+        for current_dir, directory_names, file_names in os.walk(
+            source_dir, topdown=True, followlinks=False, onerror=raise_walk_error
+        ):
+            current_path = Path(current_dir)
+            relative_dir = current_path.relative_to(source_dir)
+            directory_names.sort()
+            file_names.sort()
+
+            for directory_name in list(directory_names):
+                _validate_transfer_path_component(directory_name)
+                directory_path = current_path / directory_name
+                if directory_path.is_symlink():
+                    raise ValueError(f"Symbolic links are not included: {directory_path}")
+                archive_name = PurePosixPath(root_name, *relative_dir.parts, directory_name)
+                archive.writestr(f"{archive_name.as_posix()}/", "")
+
+            for file_name in file_names:
+                _validate_transfer_path_component(file_name)
+                file_path = current_path / file_name
+                if file_path.is_symlink():
+                    raise ValueError(f"Symbolic links are not included: {file_path}")
+                if file_path.resolve() == archive_path:
+                    continue
+                if not stat.S_ISREG(file_path.lstat().st_mode):
+                    raise ValueError(f"Unsupported special file: {file_path}")
+                archive_name = PurePosixPath(root_name, *relative_dir.parts, file_name)
+                archive.write(file_path, archive_name.as_posix())
+
+
+def extract_folder_archive(archive_path: Path, receive_dir: Path, folder_name: str) -> Path:
+    """Safely extract a folder archive into a staging directory and commit it."""
+    _validate_transfer_path_component(folder_name)
+    receive_dir = Path(receive_dir)
+    receive_dir.mkdir(parents=True, exist_ok=True)
+    staging_dir = receive_dir / f".localsend-{uuid.uuid4().hex}.part"
+    staging_dir.mkdir(mode=0o700)
+    seen_entries = set()
+    root_entry_seen = False
+
+    try:
+        with zipfile.ZipFile(archive_path, mode="r", allowZip64=True) as archive:
+            for info in archive.infolist():
+                if info.compress_type != zipfile.ZIP_STORED:
+                    raise ValueError("Compressed folder archives are not supported.")
+                raw_name = info.filename.replace("\\", "/")
+                if raw_name.startswith("/"):
+                    raise ValueError("Archive contains an absolute path.")
+                raw_parts = raw_name.split("/")
+                if raw_parts and raw_parts[-1] == "":
+                    raw_parts.pop()
+                if not raw_parts or any(part in {"", ".", ".."} for part in raw_parts):
+                    raise ValueError("Archive contains an unsafe path.")
+                parts = [_validate_transfer_path_component(part) for part in raw_parts]
+                if parts[0] != folder_name:
+                    raise ValueError("Archive folder name does not match its request.")
+                if len(parts) == 1:
+                    if not info.is_dir():
+                        raise ValueError("Archive root must be a directory.")
+                    if root_entry_seen:
+                        raise ValueError("Archive contains duplicate root entries.")
+                    root_entry_seen = True
+                    continue
+
+                mode = (info.external_attr >> 16) & 0xFFFF
+                kind = stat.S_IFMT(mode)
+                is_directory = info.is_dir()
+                if kind not in (0, stat.S_IFREG, stat.S_IFDIR):
+                    raise ValueError("Archive contains a symbolic link or special file.")
+                if (is_directory and kind == stat.S_IFREG) or (
+                    not is_directory and kind == stat.S_IFDIR
+                ):
+                    raise ValueError("Archive entry type is inconsistent.")
+
+                entry_key = tuple(parts)
+                if entry_key in seen_entries:
+                    raise ValueError("Archive contains duplicate paths.")
+                seen_entries.add(entry_key)
+                target_path = staging_dir.joinpath(*parts[1:])
+                if is_directory:
+                    target_path.mkdir(parents=True, exist_ok=True)
+                    continue
+
+                target_path.parent.mkdir(parents=True, exist_ok=True)
+                with archive.open(info, "r") as source, target_path.open("xb") as target:
+                    shutil.copyfileobj(source, target, length=CHUNK_SIZE)
+
+        if not root_entry_seen:
+            raise ValueError("Archive does not contain its root folder.")
+
+        index = 0
+        while True:
+            suffix = "" if index == 0 else f" ({index})"
+            final_path = receive_dir / f"{folder_name}{suffix}"
+            if final_path.exists() or final_path.is_symlink():
+                index += 1
+                continue
+            try:
+                staging_dir.rename(final_path)
+                return final_path
+            except FileExistsError:
+                index += 1
+    except Exception:
+        shutil.rmtree(staging_dir, ignore_errors=True)
+        raise
+
+
 def open_receive_directory(page: ft.Page, config=None):
     """Open the configured save directory in the system file manager when possible."""
     target_dir = get_receive_dir(config)
@@ -678,37 +840,42 @@ def open_receive_directory(page: ft.Page, config=None):
     try:
         if page.platform is not None and page.platform.is_mobile():
             mActivity, autoclass = get_android_activity()
+            intent_class = autoclass("android.content.Intent")
+            intent = intent_class()
+            intent.setAction(intent_class.ACTION_VIEW)
 
-            intent = autoclass("android.content.Intent")()
-            intent.setAction(autoclass("android.content.Intent").ACTION_VIEW)
-
-            android_uri = None
             try:
-                android_uri = autoclass("android.net.Uri").parse(
-                    "content://downloads/all_downloads"
+                storage_root = Path("/storage")
+                relative_path = target_dir.absolute().relative_to(storage_root)
+                if (
+                    len(relative_path.parts) >= 2
+                    and relative_path.parts[0] == "emulated"
+                    and relative_path.parts[1] == "0"
+                ):
+                    volume_id = "primary"
+                    folder_parts = relative_path.parts[2:]
+                elif relative_path.parts:
+                    volume_id = relative_path.parts[0]
+                    folder_parts = relative_path.parts[1:]
+                else:
+                    raise ValueError("The receive directory is not on shared storage")
+
+                document_id = volume_id + ":" + "/".join(folder_parts)
+                documents_contract = autoclass(
+                    "android.provider.DocumentsContract"
                 )
-            except Exception:
-                android_uri = None
-
-            if android_uri is not None:
-                try:
-                    intent.setDataAndType(android_uri, "vnd.android.document/directory")
-                    mActivity.startActivity(intent)
-                    return
-                except Exception:
-                    pass
-
-            try:
-                uri = autoclass("android.net.Uri").fromFile(str(target_dir))
-                intent.setDataAndType(uri, "*/*")
+                folder_uri = documents_contract.buildDocumentUri(
+                    "com.android.externalstorage.documents", document_id
+                )
+                intent.setDataAndType(folder_uri, "vnd.android.document/directory")
+                intent.addFlags(intent_class.FLAG_GRANT_READ_URI_PERMISSION)
                 mActivity.startActivity(intent)
                 return
             except Exception:
                 pass
 
             try:
-                downloads_dir = get_received_files_dir()
-                uri = autoclass("android.net.Uri").fromFile(str(downloads_dir))
+                uri = autoclass("android.net.Uri").fromFile(str(target_dir))
                 intent.setDataAndType(uri, "vnd.android.document/directory")
                 mActivity.startActivity(intent)
                 return
@@ -1085,9 +1252,13 @@ def main(page: ft.Page):
             async with receiver_lock:
                 filename = ""
                 handshake_replied = False
+                folder_transfer = False
+                partial_path = None
                 try:
                     header_text = header.decode("utf-8")
-                    encoded_filename = header_text.startswith("FILEE64:")
+                    folder_transfer = header_text.startswith("FILEZ64:")
+                    legacy_encoded_filename = header_text.startswith("FILEE64:")
+                    encoded_filename = folder_transfer or legacy_encoded_filename
                     encrypted_transfer = encoded_filename or header_text.startswith("FILEE:")
                     if not encrypted_transfer:
                         raise ValueError("Unencrypted transfers are not accepted")
@@ -1102,7 +1273,10 @@ def main(page: ft.Page):
                     key_size = int(key_size_text)
                     if key_size != 256:
                         raise ValueError("Invalid wrapped key size")
-                    filename = Path(filename).name
+                    if folder_transfer:
+                        _validate_transfer_path_component(filename)
+                    else:
+                        filename = Path(filename).name
                     filesize = int(filesize_text)
                     if not filename or filesize < 0:
                         raise ValueError("Invalid file name or size")
@@ -1116,9 +1290,12 @@ def main(page: ft.Page):
 
                     request_dialog = ft.AlertDialog(
                         modal=True,
-                        title=ft.Text(tr("request_file")),
+                        title=ft.Text(
+                            tr("request_folder") if folder_transfer else tr("request_file")
+                        ),
                         content=ft.Text(
-                            f"{tr('device', value=source_ip)}\n{tr('file', value=filename)}\n"
+                            f"{tr('device', value=source_ip)}\n"
+                            f"{tr('folder' if folder_transfer else 'file', value=filename)}\n"
                             f"{tr('size', value=filesize / (1024 * 1024))}"
                         ),
                         actions=[
@@ -1181,7 +1358,7 @@ def main(page: ft.Page):
                             )
                             aes_key = base64.urlsafe_b64decode(wrapped_text)
                             nonce_prefix = await reader.readexactly(
-                                4 if encoded_filename else 8
+                                4 if legacy_encoded_filename else 8
                             )
                             chunk_index = 0
                             while received_bytes < filesize:
@@ -1218,9 +1395,24 @@ def main(page: ft.Page):
                         )
                         return
 
-                    partial_path.replace(received_path)
+                    if folder_transfer:
+                        progress_text.value = tr("extracting_folder", name=filename)
+                        page.update()
+                        try:
+                            received_path = await asyncio.to_thread(
+                                extract_folder_archive, partial_path, receive_dir, filename
+                            )
+                        except Exception:
+                            writer.write(b"FAIL")
+                            await writer.drain()
+                            raise
+                        partial_path.unlink(missing_ok=True)
+                        writer.write(b"DONE")
+                        await writer.drain()
+                    else:
+                        partial_path.replace(received_path)
 
-                    if encoded_filename:
+                    if encoded_filename and not folder_transfer:
                         writer.write(b"DONE")
                         await writer.drain()
                     add_activity(
@@ -1234,7 +1426,7 @@ def main(page: ft.Page):
                             await writer.drain()
                         except OSError:
                             pass
-                    if "partial_path" in locals():
+                    if partial_path is not None:
                         partial_path.unlink(missing_ok=True)
                     add_activity(tr("receive_failed", error=error), color="red")
                 except Exception as error:
@@ -1244,7 +1436,7 @@ def main(page: ft.Page):
                             await writer.drain()
                         except OSError:
                             pass
-                    if "partial_path" in locals():
+                    if partial_path is not None:
                         partial_path.unlink(missing_ok=True)
                     add_activity(tr("receive_exception", error=error), color="red")
                 finally:
@@ -1741,9 +1933,11 @@ def main(page: ft.Page):
                 except OSError:
                     pass
 
-    async def send_file_to_device(selected_file, target):
-        """Send one selected file to a discovered device using the TCP protocol."""
+    async def send_file_to_device(selected_file, target, folder_name=None):
+        """Send a selected file or a prepared folder archive to a discovered device."""
         raw_path = getattr(selected_file, "path", None)
+        if raw_path is None and isinstance(selected_file, (str, os.PathLike)):
+            raw_path = selected_file
         if raw_path is None and callable(
             getattr(selected_file, "getAbsolutePath", None)
         ):
@@ -1758,7 +1952,7 @@ def main(page: ft.Page):
         if not isinstance(name_value, str):
             get_name = getattr(name_value, "getName", None)
             name_value = get_name() if callable(get_name) else str(name_value)
-        filename = Path(str(name_value)).name.replace("\r", "_").replace("\n", "_")
+        filename = folder_name or Path(str(name_value)).name.replace("\r", "_").replace("\n", "_")
 
         try:
             if file_path:
@@ -1781,13 +1975,21 @@ def main(page: ft.Page):
             receiver_public_key = await get_verified_peer_public_key(target)
             reader, writer = await open_peer_connection(target, refresh=False)
             aes_key = os.urandom(32)
-            # Keep the established FILEE header so already-installed receivers
-            # continue to show the incoming-file approval dialog.
             nonce_prefix = os.urandom(8)
             wrapped_key = encrypt_message(
                 receiver_public_key, base64.urlsafe_b64encode(aes_key).decode("ascii")
             )
-            writer.write(f"FILEE:{filename}:{filesize}:{len(wrapped_key)}\n".encode("utf-8"))
+            if folder_name is None:
+                # Keep the established file header for older installed receivers.
+                header = f"FILEE:{filename}:{filesize}:{len(wrapped_key)}\n".encode("utf-8")
+            else:
+                encoded_folder_name = base64.urlsafe_b64encode(
+                    filename.encode("utf-8")
+                ).decode("ascii")
+                header = (
+                    f"FILEZ64:{encoded_folder_name}:{filesize}:{len(wrapped_key)}\n"
+                ).encode("ascii")
+            writer.write(header)
             await writer.drain()
             try:
                 response = await asyncio.wait_for(reader.readexactly(6), timeout=35)
@@ -1831,6 +2033,17 @@ def main(page: ft.Page):
 
             if sent_bytes != filesize:
                 raise OSError(tr("partial_send"))
+            if folder_name is not None:
+                try:
+                    acknowledgement = await asyncio.wait_for(
+                        reader.readexactly(4), timeout=600
+                    )
+                except asyncio.IncompleteReadError as error:
+                    raise OSError(tr("folder_receive_failed")) from error
+                if acknowledgement == b"FAIL":
+                    raise OSError(tr("folder_receive_failed"))
+                if acknowledgement != b"DONE":
+                    raise OSError(tr("folder_receive_failed"))
             add_activity(tr("sent_ok", name=filename, device=target["name"]), is_me=True)
         except Exception as error:
             add_activity(tr("transfer_failed", error=error), color="red")
@@ -1847,8 +2060,41 @@ def main(page: ft.Page):
             progress_text.visible = False
             page.update()
 
-    async def handle_selected_file(selected_file):
-        """Choose a discovered recipient for a file selected by the user."""
+    async def send_folder_to_device(folder_path, target):
+        """Archive a selected folder temporarily, then send it over the file stream."""
+        raw_path = local_file_path(folder_path)
+        if raw_path is None:
+            add_activity(tr("transfer_failed", error="تعذر قراءة مسار المجلد المحدد."), color="red")
+            return
+
+        archive_path = None
+        try:
+            source_dir = raw_path.expanduser()
+            if source_dir.is_symlink():
+                raise ValueError("لا يمكن إرسال مجلد رمزي.")
+            source_dir = source_dir.resolve(strict=True)
+            folder_name = source_dir.name
+            _validate_transfer_path_component(folder_name)
+            if not source_dir.is_dir() or source_dir == Path(source_dir.anchor):
+                raise ValueError("اختر مجلدًا صالحًا وليس جذر القرص.")
+            add_activity(tr("preparing_folder", name=folder_name))
+            file_descriptor, temporary_name = tempfile.mkstemp(
+                prefix="localsend-folder-", suffix=".zip"
+            )
+            os.close(file_descriptor)
+            archive_path = Path(temporary_name)
+            await asyncio.to_thread(
+                create_folder_archive, source_dir, archive_path, folder_name
+            )
+            await send_file_to_device(archive_path, target, folder_name=folder_name)
+        except Exception as error:
+            add_activity(tr("transfer_failed", error=error), color="red")
+        finally:
+            if archive_path is not None:
+                archive_path.unlink(missing_ok=True)
+
+    async def handle_selected_file(selected_file, is_folder=False):
+        """Choose a discovered recipient for a file or folder selected by the user."""
         with devices_lock:
             devices = list(discovered_devices.values())
         if not devices:
@@ -1874,7 +2120,8 @@ def main(page: ft.Page):
         def confirm_send(_):
             target = devices[int(device_dropdown.value)]
             page.pop_dialog()
-            page.run_task(send_file_to_device, selected_file, target)
+            send_task = send_folder_to_device if is_folder else send_file_to_device
+            page.run_task(send_task, selected_file, target)
 
         page.show_dialog(
             ft.AlertDialog(
@@ -1900,6 +2147,19 @@ def main(page: ft.Page):
         if selected_files:
             await handle_selected_file(selected_files[0])
 
+    async def pick_folder(_):
+        """Select a local folder to send on desktop or mobile platforms."""
+        if page.web or not hasattr(file_picker, "get_directory_path"):
+            add_activity(tr("folder_send_web_unsupported"), color="red")
+            return
+        try:
+            selected_folder = await file_picker.get_directory_path()
+        except Exception as error:
+            add_activity(tr("transfer_failed", error=error), color="red")
+            return
+        if selected_folder:
+            await handle_selected_file(selected_folder, is_folder=True)
+
     def handle_file_result(event: ft.FilePickerResultEvent):
         """Continue after a browser-side PickFiles action returns its selection."""
         if event.files:
@@ -1913,16 +2173,8 @@ def main(page: ft.Page):
             save_app_settings(app_config)
             add_activity(tr("folder_set", path=app_config["receive_dir"]), color="green")
 
-    async def pick_receive_directory(_):
-        """Pick a destination folder using the OS-supported directory chooser."""
-        if hasattr(file_picker, "get_directory_path"):
-            selected = await file_picker.get_directory_path()
-            if selected:
-                app_config["receive_dir"] = str(safe_receive_dir(selected))
-                app_config["receive_dir_mode"] = "custom"
-                save_app_settings(app_config)
-                add_activity(tr("folder_set", path=app_config["receive_dir"]), color="green")
-                return
+    def open_receive_folder(_):
+        """Open the current receive destination without changing its setting."""
         open_receive_directory(page, app_config)
 
     async def open_settings(_):
@@ -2020,6 +2272,9 @@ def main(page: ft.Page):
             files_caption.value = tr("files")
             settings_button.tooltip = tr("settings")
             file_button.tooltip = tr("choose_file")
+            send_folder_button.tooltip = tr(
+                "folder_send_web_unsupported" if page.web else "choose_folder_to_send"
+            )
             open_receive_folder_button.tooltip = tr("open_folder")
             send_message_button.tooltip = tr("send_message")
             await refresh_devices()
@@ -2093,11 +2348,20 @@ def main(page: ft.Page):
         on_click=None if pick_files_action else pick_file,
         action=pick_files_action,
     )
+    send_folder_button = ft.IconButton(
+        icon=ft.Icons.FOLDER,
+        icon_color=ft.Colors.TEAL,
+        tooltip=tr(
+            "folder_send_web_unsupported" if page.web else "choose_folder_to_send"
+        ),
+        on_click=pick_folder if not page.web else None,
+        disabled=page.web,
+    )
     open_receive_folder_button = ft.IconButton(
         icon=ft.Icons.DOWNLOAD_ROUNDED,
         icon_color=ft.Colors.GREEN,
         tooltip=tr("open_folder"),
-        on_click=pick_receive_directory,
+        on_click=open_receive_folder,
     )
     devices_heading = ft.Text(tr("devices"), size=12, weight=ft.FontWeight.BOLD, rtl=page.rtl)
     activity_heading = ft.Text(tr("activity"), size=12, weight=ft.FontWeight.BOLD, rtl=page.rtl)
@@ -2144,12 +2408,19 @@ def main(page: ft.Page):
         ft.Column(
             [speed_status_text, progress_text, progress_bar], spacing=3
         ),
-        ft.Row(
-            [
-                file_button,
-                open_receive_folder_button,
-                files_caption,
-            ]
+        ft.SafeArea(
+            avoid_intrusions_top=False,
+            avoid_intrusions_left=False,
+            avoid_intrusions_right=False,
+            avoid_intrusions_bottom=True,
+            content=ft.Row(
+                [
+                    file_button,
+                    send_folder_button,
+                    open_receive_folder_button,
+                    files_caption,
+                ]
+            ),
         ),
     )
 
