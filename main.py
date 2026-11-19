@@ -755,6 +755,103 @@ def create_folder_archive(source_dir: Path, archive_path: Path, root_name: str) 
                 archive.write(file_path, archive_name.as_posix())
 
 
+def android_storage_document_id(source_dir: Path) -> str | None:
+    """Map shared Android storage paths to the document IDs used by SAF."""
+    try:
+        relative_path = Path(source_dir).absolute().relative_to(Path("/storage"))
+    except ValueError:
+        return None
+
+    if (
+        len(relative_path.parts) >= 2
+        and relative_path.parts[0] == "emulated"
+        and relative_path.parts[1] == "0"
+    ):
+        volume_id = "primary"
+        folder_parts = relative_path.parts[2:]
+    elif relative_path.parts:
+        volume_id = relative_path.parts[0]
+        folder_parts = relative_path.parts[1:]
+    else:
+        return None
+    return volume_id + ":" + "/".join(folder_parts)
+
+
+def create_android_folder_archive(
+    context, autoclass, document_id: str, archive_path: Path, root_name: str
+) -> None:
+    """Read a user-selected Android folder tree through its SAF grant."""
+    _validate_transfer_path_component(root_name)
+    documents_contract = autoclass("android.provider.DocumentsContract")
+    tree_uri = documents_contract.buildTreeDocumentUri(
+        "com.android.externalstorage.documents", document_id
+    )
+    resolver = context.getContentResolver()
+    visited_directories = {document_id}
+    seen_entries = set()
+
+    with zipfile.ZipFile(
+        archive_path, mode="w", compression=zipfile.ZIP_STORED, allowZip64=True
+    ) as archive:
+        archive.writestr(f"{root_name}/", "")
+
+        def add_children(parent_document_id: str, relative_parts: tuple[str, ...]):
+            children_uri = documents_contract.buildChildDocumentsUriUsingTree(
+                tree_uri, parent_document_id
+            )
+            cursor = resolver.query(children_uri, None, None, None, None)
+            if cursor is None:
+                raise OSError("Android did not return the selected folder contents.")
+
+            try:
+                document_id_column = cursor.getColumnIndexOrThrow("document_id")
+                display_name_column = cursor.getColumnIndexOrThrow("_display_name")
+                mime_type_column = cursor.getColumnIndexOrThrow("mime_type")
+                while cursor.moveToNext():
+                    child_document_id = str(cursor.getString(document_id_column))
+                    child_name = _validate_transfer_path_component(
+                        str(cursor.getString(display_name_column))
+                    )
+                    child_parts = (*relative_parts, child_name)
+                    archive_name = PurePosixPath(
+                        root_name, *child_parts
+                    ).as_posix()
+                    if archive_name in seen_entries:
+                        raise ValueError("The selected folder contains duplicate names.")
+                    seen_entries.add(archive_name)
+
+                    mime_type = cursor.getString(mime_type_column)
+                    if mime_type == "vnd.android.document/directory":
+                        if child_document_id in visited_directories:
+                            raise ValueError("The selected folder contains a directory cycle.")
+                        visited_directories.add(child_document_id)
+                        archive.writestr(f"{archive_name}/", "")
+                        add_children(child_document_id, child_parts)
+                        continue
+
+                    child_uri = documents_contract.buildDocumentUriUsingTree(
+                        tree_uri, child_document_id
+                    )
+                    descriptor = resolver.openFileDescriptor(child_uri, "r")
+                    if descriptor is None:
+                        raise OSError(f"Could not read file: {child_name}")
+                    try:
+                        file_descriptor = os.dup(int(descriptor.getFd()))
+                    finally:
+                        descriptor.close()
+
+                    zip_info = zipfile.ZipInfo(archive_name)
+                    zip_info.compress_type = zipfile.ZIP_STORED
+                    zip_info.external_attr = (stat.S_IFREG | 0o644) << 16
+                    with os.fdopen(file_descriptor, "rb") as source_file:
+                        with archive.open(zip_info, "w", force_zip64=True) as archive_file:
+                            shutil.copyfileobj(source_file, archive_file, length=CHUNK_SIZE)
+            finally:
+                cursor.close()
+
+        add_children(document_id, ())
+
+
 def extract_folder_archive(archive_path: Path, receive_dir: Path, folder_name: str) -> Path:
     """Safely extract a folder archive into a staging directory and commit it."""
     _validate_transfer_path_component(folder_name)
@@ -2069,6 +2166,16 @@ def main(page: ft.Page):
 
         archive_path = None
         try:
+            if ANDROID_RUNTIME:
+                raw_path_text = str(raw_path).replace("\\", "/")
+                android_storage_prefix = "c:/storage/emulated/0/"
+                normalized_android_path = raw_path_text.lower()
+                if normalized_android_path == "c:/storage/emulated/0":
+                    raw_path = Path("/storage/emulated/0")
+                elif normalized_android_path.startswith(android_storage_prefix):
+                    raw_path = Path("/storage/emulated/0") / raw_path_text[
+                        len(android_storage_prefix) :
+                    ]
             source_dir = raw_path.expanduser()
             if source_dir.is_symlink():
                 raise ValueError("لا يمكن إرسال مجلد رمزي.")
@@ -2083,9 +2190,23 @@ def main(page: ft.Page):
             )
             os.close(file_descriptor)
             archive_path = Path(temporary_name)
-            await asyncio.to_thread(
-                create_folder_archive, source_dir, archive_path, folder_name
+            document_id = (
+                android_storage_document_id(source_dir) if ANDROID_RUNTIME else None
             )
+            if document_id is not None:
+                android_context, autoclass = get_android_context()
+                await asyncio.to_thread(
+                    create_android_folder_archive,
+                    android_context,
+                    autoclass,
+                    document_id,
+                    archive_path,
+                    folder_name,
+                )
+            else:
+                await asyncio.to_thread(
+                    create_folder_archive, source_dir, archive_path, folder_name
+                )
             await send_file_to_device(archive_path, target, folder_name=folder_name)
         except Exception as error:
             add_activity(tr("transfer_failed", error=error), color="red")
